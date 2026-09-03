@@ -1,10 +1,14 @@
 import { Request, Response } from "express";
 
 import prisma from "../db/prisma";
+
 import {
-  findProducts,
-  countProducts,
-} from "../repositories/product.repository";
+  getProductBySlug as getProductDetails,
+  getProductPrices as getPrices,
+  getProductPriceHistory as getPriceHistory,
+} from "../services/product.service";
+
+import { searchProducts } from "../services/product-search.service";
 
 export const getProducts = async (req: Request, res: Response) => {
   try {
@@ -56,81 +60,40 @@ if (!allowedSorts.includes(sort)) {
   return;
 }
 
-    const where = {
-      isActive: true,
-
-      ...(search
-        ? {
-            OR: [
-              {
-                name: {
-                  contains: search,
-                  mode: "insensitive" as const,
-                },
-              },
-              {
-                description: {
-                  contains: search,
-                  mode: "insensitive" as const,
-                },
-              },
-            ],
-          }
-        : {}),
-
-      ...(brand
-        ? {
-            brand: {
-              slug: brand,
-            },
-          }
-        : {}),
-
-      ...(category
-        ? {
-            category: {
-              slug: category,
-            },
-          }
-        : {}),
-
-      ...(minPrice !== undefined || maxPrice !== undefined
-        ? {
-            prices: {
-              some: {
-                inStock: true,
-                amount: {
-                  ...(minPrice !== undefined && !Number.isNaN(minPrice)
-                    ? { gte: minPrice }
-                    : {}),
-                  ...(maxPrice !== undefined && !Number.isNaN(maxPrice)
-                    ? { lte: maxPrice }
-                    : {}),
-                },
-              },
-            },
-          }
-        : {}),
-    };
-
-    const products = await findProducts(
-  where,
-  (page - 1) * limit,
+    const result = await searchProducts({
+  page,
   limit,
+  search,
+  brand,
+  category,
+  minPrice:
+    minPrice !== undefined && !Number.isNaN(minPrice)
+      ? minPrice
+      : undefined,
+  maxPrice:
+    maxPrice !== undefined && !Number.isNaN(maxPrice)
+      ? maxPrice
+      : undefined,
   sort,
-);
+});
 
-const total = await countProducts(where);
+const { products, pagination } = result;
+const formattedProducts = products.map((product) => ({
+  id: product.id, 
+  name: product.name,
+  slug: product.slug,
+  brand: product.brand,
+  category: product.category,
+  image: product.images[0] ?? null,
+  lowestPrice: product.prices[0]?.amount ?? null,
+  currency: product.prices[0]?.currency ?? "INR",
+  seller: product.prices[0]?.seller ?? null,
+}));
 
     res.status(200).json({
       success: true,
-      data: products,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      data: formattedProducts,
+      pagination,
     });
   } catch (error) { 
     console.error("Failed to fetch products:", error);
@@ -159,11 +122,11 @@ export const getProductBySlug = async (
       return;
     }
 
-    const product = await prisma.product.findUnique({
-      where: {
-        slug,
-      },
-      include: {
+   const product = await prisma.product.findUnique({
+  where: {
+    slug,
+  },
+  include: {
         brand: true,
         category: true,
         images: {
@@ -237,18 +200,9 @@ export const getProductPrices = async (
       return;
     }
 
-    const product = await prisma.product.findUnique({
-      where: {
-        slug,
-      },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-      },
-    });
+    const result = await getPrices(slug);
 
-    if (!product) {
+    if (!result) {
       res.status(404).json({
         success: false,
         message: "Product not found",
@@ -256,29 +210,9 @@ export const getProductPrices = async (
       return;
     }
 
-    const prices = await prisma.price.findMany({
-      where: {
-        productId: product.id,
-        inStock: true,
-      },
-      include: {
-        seller: true,
-        variant: true,
-      },
-      orderBy: {
-        amount: "asc",
-      },
-    });
-
-    const lowestPrice = prices[0]?.amount ?? null;
-
     res.status(200).json({
       success: true,
-      data: {
-        product,
-        lowestPrice,
-        prices,
-      },
+      data: result,
     });
   } catch (error) {
     console.error("Failed to fetch product prices:", error);
@@ -307,18 +241,9 @@ export const getProductPriceHistory = async (
       return;
     }
 
-    const product = await prisma.product.findUnique({
-      where: {
-        slug,
-      },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-      },
-    });
+    const result = await getPriceHistory(slug);
 
-    if (!product) {
+    if (!result) {
       res.status(404).json({
         success: false,
         message: "Product not found",
@@ -326,42 +251,16 @@ export const getProductPriceHistory = async (
       return;
     }
 
-    const priceHistory = await prisma.price.findMany({
-      where: {
-        productId: product.id,
-      },
-      include: {
-        seller: true,
-        variant: true,
-      },
-      orderBy: {
-        recordedAt: "asc",
-      },
-    });
-
-    const lowestPrice =
-      priceHistory.length > 0
-        ? priceHistory.reduce(
-            (lowest, current) =>
-              current.amount.lessThan(lowest) ? current.amount : lowest,
-            priceHistory[0]!.amount,
-          )
-        : null;
-
     res.status(200).json({
       success: true,
-      data: {
-        product,
-        lowestHistoricalPrice: lowestPrice,
-        history: priceHistory,
-      },
+      data: result,
     });
   } catch (error) {
-    console.error("Failed to fetch price history:", error);
+    console.error("Failed to fetch product price history:", error);
 
     res.status(500).json({
       success: false,
-      message: "Failed to fetch price history",
+      message: "Failed to fetch product price history",
     });
   }
 };

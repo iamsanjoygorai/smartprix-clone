@@ -1,5 +1,6 @@
 import prisma from "../db/prisma";
 
+
 export const getComparisonProducts = async (
   productIds: string[],
 ) => {
@@ -101,4 +102,47 @@ export const buildSpecificationComparison = (
   }
 
   return Array.from(specificationMap.values());
+};
+
+
+export const getProductBySlug = async (slug: string) => {
+  return prisma.product.findUnique({
+    where: {
+      slug,
+      isActive: true,
+    },
+    include: {
+      brand: true,
+      category: true,
+      images: {
+        orderBy: {
+          sortOrder: "asc",
+        },
+      },
+      variants: true,
+      specifications: {
+        include: {
+          specification: true,
+          value: true,
+        },
+      },
+      prices: {
+        where: {
+          inStock: true,
+        },
+        include: {
+          seller: true,
+          variant: true,
+        },
+        orderBy: {
+          amount: "asc",
+        },
+      },
+      reviews: {
+        orderBy: {
+          createdAt: "desc",
+        },
+      },
+    },
+  });
 };

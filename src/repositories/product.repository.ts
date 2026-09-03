@@ -20,14 +20,17 @@ export const findProducts = async (
         take: 1,
       },
       prices: {
-        where: {
-          inStock: true,
-        },
-        orderBy: {
-          amount: "asc",
-        },
-        take: 1,
-      },
+  where: {
+    inStock: true,
+  },
+  include: {
+    seller: true,
+  },
+  orderBy: {
+    amount: "asc",
+  },
+  take: 1,
+},
     },
     orderBy: {
       createdAt: "desc",
