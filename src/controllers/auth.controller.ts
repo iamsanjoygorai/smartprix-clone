@@ -3,6 +3,7 @@ import { Request, Response } from "express";
 import { loginSchema } from "../validators/auth.validator";
 import { loginUser, registerUser } from "../services/auth.service";
 import { registerSchema } from "../validators/register.validator";
+import prisma from "../db/prisma";
 
 export const login = async (
   req: Request,
@@ -92,6 +93,65 @@ export const register = async (
     res.status(500).json({
       success: false,
       message: "Registration failed",
+    });
+  }
+};
+
+
+export const getMe = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    if (!req.user || typeof req.user === "string") {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+      return;
+    }
+
+    const userId = req.user.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Invalid authentication token",
+      });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    console.error("Failed to fetch current user:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch current user",
     });
   }
 };
