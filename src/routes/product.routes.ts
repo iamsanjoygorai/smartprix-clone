@@ -1,25 +1,19 @@
 import { Router } from "express";
 
 import {
-  getProducts,
-  getProductBySlug,
-  getProductPrices,
-  getProductPriceHistory,
-  getProductSpecifications
+  getAllProducts,
+  getProduct,
+  getPrices,
+  getPriceHistory,
+  getSpecifications,
 } from "../controllers/product.controller";
-
-
 
 const router = Router();
 
-router.get("/", getProducts);
-
-router.get("/:slug/prices", getProductPrices);
-
-router.get("/:slug/price-history", getProductPriceHistory);
-
-router.get("/:slug/specifications", getProductSpecifications);
-
-router.get("/:slug", getProductBySlug);
+router.get("/", getAllProducts);
+router.get("/:slug", getProduct);
+router.get("/:slug/prices", getPrices);
+router.get("/:slug/price-history", getPriceHistory);
+router.get("/:slug/specifications", getSpecifications);
 
 export default router;

@@ -5,6 +5,8 @@ import comparisonRoutes from "./comparison.routes";
 import categoryRoutes from "./category.routes";
 import brandRoutes from "./brand.routes";
 import adminProductRoutes from "./admin-product.routes";
+import { requireAuth } from "../middlewares/auth.middleware";
+import authRoutes from "./auth.routes";
 
 const router = Router();
 
@@ -19,6 +21,7 @@ router.use("/products", productRoutes);
 router.use("/comparisons", comparisonRoutes);
 router.use("/categories", categoryRoutes);
 router.use("/brands", brandRoutes);
-router.use("/admin", adminProductRoutes);
+router.use("/admin", requireAuth, adminProductRoutes);
+router.use("/auth", authRoutes);
 
 export default router;
