@@ -8,6 +8,7 @@ import adminProductRoutes from "./admin-product.routes";
 import authRoutes from "./auth.routes";
 import { requireAuth } from "../middlewares/auth.middleware";
 import { requireAdmin } from "../middlewares/admin.middleware";
+import sellerRoutes from "./seller.routes";
 
 const router = Router();
 
@@ -22,6 +23,8 @@ router.use("/products", productRoutes);
 router.use("/comparisons", comparisonRoutes);
 router.use("/categories", categoryRoutes);
 router.use("/brands", brandRoutes);
+router.use("/sellers", sellerRoutes);
+
 router.use(
   "/admin",
   requireAuth,
