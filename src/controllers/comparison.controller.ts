@@ -1,5 +1,9 @@
 import { Request, Response } from "express";
 import prisma from "../db/prisma";
+import {
+  getComparisonProducts,
+  buildSpecificationComparison,
+} from "../services/comparison.service";
 
 export const createComparison = async (
   req: Request,
@@ -142,12 +146,7 @@ export const getComparisonById = async (
         id: comparisonId,
       },
       include: {
-        products: {
-          include: {
-            // ComparisonProduct only stores productId,
-            // so fetch the actual product separately below.
-          },
-        },
+        products: true,
       },
     });
 
@@ -163,68 +162,19 @@ export const getComparisonById = async (
       (item) => item.productId,
     );
 
-    const products = await prisma.product.findMany({
-      where: {
-        id: {
-          in: productIds,
-        },
-        isActive: true,
-      },
-      include: {
-        brand: true,
-        category: true,
-        images: {
-          orderBy: {
-            sortOrder: "asc",
-          },
-          take: 1,
-        },
-        specifications: {
-          include: {
-            specification: true,
-            value: true,
-          },
-        },
-        prices: {
-          where: {
-            inStock: true,
-          },
-          include: {
-            seller: true,
-          },
-          orderBy: {
-            amount: "asc",
-          },
-        },
-      },
-    });
-
-    const comparisonProducts = productIds
-      .map((productId) =>
-        products.find((product) => product.id === productId),
-      )
-      .filter((product) => product !== undefined)
-      .map((product) => ({
-        id: product.id,
-        name: product.name,
-        slug: product.slug,
-        brand: product.brand,
-        category: product.category,
-        images: product.images,
-        specifications: product.specifications,
-        prices: product.prices,
-        lowestPrice: product.prices[0]?.amount ?? null,
-      }));
+    const products = await getComparisonProducts(productIds);
+    const specifications = buildSpecificationComparison(products);
 
     res.status(200).json({
-      success: true,
-      data: {
-        comparisonId: comparison.id,
-        products: comparisonProducts,
-        createdAt: comparison.createdAt,
-        updatedAt: comparison.updatedAt,
-      },
-    });
+  success: true,
+  data: {
+    comparisonId: comparison.id,
+    products,
+    specifications,
+    createdAt: comparison.createdAt,
+    updatedAt: comparison.updatedAt,
+  },
+});
   } catch (error) {
     console.error("Failed to fetch comparison:", error);
 
@@ -233,4 +183,4 @@ export const getComparisonById = async (
       message: "Failed to fetch comparison",
     });
   }
-};
+};;

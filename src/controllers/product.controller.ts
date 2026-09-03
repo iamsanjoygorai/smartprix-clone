@@ -1,6 +1,10 @@
 import { Request, Response } from "express";
 
 import prisma from "../db/prisma";
+import {
+  findProducts,
+  countProducts,
+} from "../repositories/product.repository";
 
 export const getProducts = async (req: Request, res: Response) => {
   try {
@@ -31,6 +35,26 @@ export const getProducts = async (req: Request, res: Response) => {
       req.query.maxPrice !== undefined
         ? Number(req.query.maxPrice)
         : undefined;
+
+    const sort =
+      typeof req.query.sort === "string"
+        ? req.query.sort
+        : "newest";
+
+    const allowedSorts = [
+  "newest",
+  "price_asc",
+  "price_desc",
+  "rating",
+];
+
+if (!allowedSorts.includes(sort)) {
+  res.status(400).json({
+    success: false,
+    message: `Invalid sort option. Allowed values: ${allowedSorts.join(", ")}`,
+  });
+  return;
+}
 
     const where = {
       isActive: true,
@@ -89,30 +113,14 @@ export const getProducts = async (req: Request, res: Response) => {
         : {}),
     };
 
-    const [products, total] = await Promise.all([
-      prisma.product.findMany({
-        where,
-        include: {
-          brand: true,
-          category: true,
-          images: {
-            orderBy: {
-              sortOrder: "asc",
-            },
-            take: 1,
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
+    const products = await findProducts(
+  where,
+  (page - 1) * limit,
+  limit,
+  sort,
+);
 
-      prisma.product.count({
-        where,
-      }),
-    ]);
+const total = await countProducts(where);
 
     res.status(200).json({
       success: true,
@@ -124,7 +132,7 @@ export const getProducts = async (req: Request, res: Response) => {
         totalPages: Math.ceil(total / limit),
       },
     });
-  } catch (error) {
+  } catch (error) { 
     console.error("Failed to fetch products:", error);
 
     res.status(500).json({
