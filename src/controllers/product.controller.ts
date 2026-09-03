@@ -45,6 +45,23 @@ export const getProducts = async (req: Request, res: Response) => {
         ? req.query.sort
         : "newest";
 
+        const specifications: Record<string, string> = {};
+
+const specificationKeys = [
+  "display",
+  "ram",
+  "storage",
+  "processor",
+  "battery",
+  "camera",
+];
+
+for (const key of specificationKeys) {
+  if (typeof req.query[key] === "string") {
+    specifications[key] = req.query[key].trim();
+  }
+}
+
     const allowedSorts = [
   "newest",
   "price_asc",
@@ -74,7 +91,8 @@ if (!allowedSorts.includes(sort)) {
     maxPrice !== undefined && !Number.isNaN(maxPrice)
       ? maxPrice
       : undefined,
-  sort,
+    sort,
+  specifications,
 });
 
 const { products, pagination } = result;

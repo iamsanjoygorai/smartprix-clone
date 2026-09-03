@@ -14,6 +14,7 @@ type ProductSearchParams = {
   minPrice?: number;
   maxPrice?: number;
   sort: string;
+  specifications?: Record<string, string>;
 };
 
 export const searchProducts = async ({
@@ -25,7 +26,36 @@ export const searchProducts = async ({
   minPrice,
   maxPrice,
   sort,
+  specifications,
 }: ProductSearchParams) => {
+  const specificationFilters: Prisma.ProductWhereInput[] = [];
+
+  if (specifications) {
+    for (const [slug, value] of Object.entries(specifications)) {
+      if (!value.trim()) continue;
+
+      specificationFilters.push({
+        specifications: {
+          some: {
+            specification: {
+              slug,
+            },
+            OR: [
+              {
+                customValue: value,
+              },
+              {
+                value: {
+                  value,
+                },
+              },
+            ],
+          },
+        },
+      });
+    }
+  }
+
   const where: Prisma.ProductWhereInput = {
     isActive: true,
 
@@ -77,6 +107,8 @@ export const searchProducts = async ({
           },
         }
       : {}),
+
+    AND: specificationFilters,
   };
 
   const products = await findProducts(
@@ -91,7 +123,7 @@ export const searchProducts = async ({
   return {
     products,
     pagination: {
-      page,
+      page, 
       limit,
       total,
       totalPages: Math.ceil(total / limit),
