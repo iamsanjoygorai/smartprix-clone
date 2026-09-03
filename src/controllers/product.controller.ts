@@ -264,3 +264,60 @@ export const getProductPriceHistory = async (
     });
   }
 };
+
+export const getProductSpecifications = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const slug = Array.isArray(req.params.slug)
+      ? req.params.slug[0]
+      : req.params.slug;
+
+    if (!slug) {
+      res.status(400).json({
+        success: false,
+        message: "Product slug is required",
+      });
+      return;
+    }
+
+    const product = await prisma.product.findUnique({
+      where: {
+        slug,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        specifications: {
+          include: {
+            specification: true,
+            value: true,
+          },
+        },
+      },
+    });
+
+    if (!product) {
+      res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: product,
+    });
+  } catch (error) {
+    console.error("Failed to fetch product specifications:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch product specifications",
+    });
+  }
+};

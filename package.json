@@ -4,6 +4,9 @@
   "private": true,
   "description": "Backend API for a Smartprix-style product discovery and price comparison platform",
   "main": "dist/server.js",
+  "prisma": {
+  "seed": "tsx prisma/seed.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",

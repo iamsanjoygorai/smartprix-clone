@@ -194,6 +194,400 @@ async function main() {
     },
   });
 
+
+    // ─────────────────────────────────────────────
+  // SPECIFICATIONS
+  // ─────────────────────────────────────────────
+
+  const display = await prisma.specification.upsert({
+    where: { slug: "display" },
+    update: {},
+    create: {
+      name: "Display",
+      slug: "display",
+      dataType: "text",
+    },
+  });
+
+  const ram = await prisma.specification.upsert({
+    where: { slug: "ram" },
+    update: {},
+    create: {
+      name: "RAM",
+      slug: "ram",
+      unit: "GB",
+      dataType: "number",
+    },
+  });
+
+  const storage = await prisma.specification.upsert({
+    where: { slug: "storage" },
+    update: {},
+    create: {
+      name: "Storage",
+      slug: "storage",
+      unit: "GB",
+      dataType: "number",
+    },
+  });
+
+  const processor = await prisma.specification.upsert({
+    where: { slug: "processor" },
+    update: {},
+    create: {
+      name: "Processor",
+      slug: "processor",
+      dataType: "text",
+    },
+  });
+
+  const battery = await prisma.specification.upsert({
+    where: { slug: "battery" },
+    update: {},
+    create: {
+      name: "Battery",
+      slug: "battery",
+      unit: "mAh",
+      dataType: "number",
+    },
+  });
+
+  const camera = await prisma.specification.upsert({
+    where: { slug: "camera" },
+    update: {},
+    create: {
+      name: "Camera",
+      slug: "camera",
+      dataType: "text",
+    },
+  });
+
+  // ─────────────────────────────────────────────
+  // SPECIFICATION VALUES
+  // ─────────────────────────────────────────────
+
+  const displayS25 = await prisma.specificationValue.create({
+    data: {
+      specificationId: display.id,
+      value: "6.2-inch AMOLED 120Hz",
+    },
+  });
+
+  const displayIphone16 = await prisma.specificationValue.create({
+    data: {
+      specificationId: display.id,
+      value: "6.1-inch OLED 60Hz",
+    },
+  });
+
+  const displayOneplus13 = await prisma.specificationValue.create({
+    data: {
+      specificationId: display.id,
+      value: "6.82-inch AMOLED 120Hz",
+    },
+  });
+
+  // ─────────────────────────────────────────────
+  // PRODUCT SPECIFICATIONS
+  // ─────────────────────────────────────────────
+
+  await prisma.productSpecification.upsert({
+    where: {
+      productId_specificationId: {
+        productId: galaxyS25.id,
+        specificationId: display.id,
+      },
+    },
+    update: {
+      valueId: displayS25.id,
+    },
+    create: {
+      productId: galaxyS25.id,
+      specificationId: display.id,
+      valueId: displayS25.id,
+    },
+  });
+
+  await prisma.productSpecification.upsert({
+    where: {
+      productId_specificationId: {
+        productId: galaxyS25.id,
+        specificationId: ram.id,
+      },
+    },
+    update: {
+      customValue: "12",
+    },
+    create: {
+      productId: galaxyS25.id,
+      specificationId: ram.id,
+      customValue: "12",
+    },
+  });
+
+  await prisma.productSpecification.upsert({
+    where: {
+      productId_specificationId: {
+        productId: galaxyS25.id,
+        specificationId: storage.id,
+      },
+    },
+    update: {
+      customValue: "256",
+    },
+    create: {
+      productId: galaxyS25.id,
+      specificationId: storage.id,
+      customValue: "256",
+    },
+  });
+
+  await prisma.productSpecification.upsert({
+    where: {
+      productId_specificationId: {
+        productId: galaxyS25.id,
+        specificationId: processor.id,
+      },
+    },
+    update: {
+      customValue: "Snapdragon 8 Elite",
+    },
+    create: {
+      productId: galaxyS25.id,
+      specificationId: processor.id,
+      customValue: "Snapdragon 8 Elite",
+    },
+  });
+
+  await prisma.productSpecification.upsert({
+    where: {
+      productId_specificationId: {
+        productId: galaxyS25.id,
+        specificationId: battery.id,
+      },
+    },
+    update: {
+      customValue: "4000",
+    },
+    create: {
+      productId: galaxyS25.id,
+      specificationId: battery.id,
+      customValue: "4000",
+    },
+  });
+
+  await prisma.productSpecification.upsert({
+    where: {
+      productId_specificationId: {
+        productId: galaxyS25.id,
+        specificationId: camera.id,
+      },
+    },
+    update: {
+      customValue: "50MP + 12MP + 10MP",
+    },
+    create: {
+      productId: galaxyS25.id,
+      specificationId: camera.id,
+      customValue: "50MP + 12MP + 10MP",
+    },
+  });
+
+  await prisma.productSpecification.upsert({
+    where: {
+      productId_specificationId: {
+        productId: iphone16.id,
+        specificationId: display.id,
+      },
+    },
+    update: {
+      valueId: displayIphone16.id,
+    },
+    create: {
+      productId: iphone16.id,
+      specificationId: display.id,
+      valueId: displayIphone16.id,
+    },
+  });
+
+  await prisma.productSpecification.upsert({
+    where: {
+      productId_specificationId: {
+        productId: iphone16.id,
+        specificationId: storage.id,
+      },
+    },
+    update: {
+      customValue: "128",
+    },
+    create: {
+      productId: iphone16.id,
+      specificationId: storage.id,
+      customValue: "128",
+    },
+  });
+
+  await prisma.productSpecification.upsert({
+    where: {
+      productId_specificationId: {
+        productId: iphone16.id,
+        specificationId: processor.id,
+      },
+    },
+    update: {
+      customValue: "Apple A18",
+    },
+    create: {
+      productId: iphone16.id,
+      specificationId: processor.id,
+      customValue: "Apple A18",
+    },
+  });
+
+  await prisma.productSpecification.upsert({
+    where: {
+      productId_specificationId: {
+        productId: iphone16.id,
+        specificationId: battery.id,
+      },
+    },
+    update: {
+      customValue: "3561",
+    },
+    create: {
+      productId: iphone16.id,
+      specificationId: battery.id,
+      customValue: "3561",
+    },
+  });
+
+  await prisma.productSpecification.upsert({
+    where: {
+      productId_specificationId: {
+        productId: iphone16.id,
+        specificationId: camera.id,
+      },
+    },
+    update: {
+      customValue: "48MP + 12MP",
+    },
+    create: {
+      productId: iphone16.id,
+      specificationId: camera.id,
+      customValue: "48MP + 12MP",
+    },
+  });
+
+  await prisma.productSpecification.upsert({
+    where: {
+      productId_specificationId: {
+        productId: oneplus13.id,
+        specificationId: display.id,
+      },
+    },
+    update: {
+      valueId: displayOneplus13.id,
+    },
+    create: {
+      productId: oneplus13.id,
+      specificationId: display.id,
+      valueId: displayOneplus13.id,
+    },
+  });
+
+  await prisma.productSpecification.upsert({
+    where: {
+      productId_specificationId: {
+        productId: oneplus13.id,
+        specificationId: ram.id,
+      },
+    },
+    update: {
+      customValue: "12",
+    },
+    create: {
+      productId: oneplus13.id,
+      specificationId: ram.id,
+      customValue: "12",
+    },
+  });
+
+  await prisma.productSpecification.upsert({
+    where: {
+      productId_specificationId: {
+        productId: oneplus13.id,
+        specificationId: storage.id,
+      },
+    },
+    update: {
+      customValue: "256",
+    },
+    create: {
+      productId: oneplus13.id,
+      specificationId: storage.id,
+      customValue: "256",
+    },
+  });
+
+  await prisma.productSpecification.upsert({
+    where: {
+      productId_specificationId: {
+        productId: oneplus13.id,
+        specificationId: processor.id,
+      },
+    },
+    update: {
+      customValue: "Snapdragon 8 Elite",
+    },
+    create: {
+      productId: oneplus13.id,
+      specificationId: processor.id,
+      customValue: "Snapdragon 8 Elite",
+    },
+  });
+
+  await prisma.productSpecification.upsert({
+    where: {
+      productId_specificationId: {
+        productId: oneplus13.id,
+        specificationId: battery.id,
+      },
+    },
+    update: {
+      customValue: "6000",
+    },
+    create: {
+      productId: oneplus13.id,
+      specificationId: battery.id,
+      customValue: "6000",
+    },
+  });
+
+  await prisma.productSpecification.upsert({
+    where: {
+      productId_specificationId: {
+        productId: oneplus13.id,
+        specificationId: camera.id,
+      },
+    },
+    update: {
+      customValue: "50MP + 50MP + 50MP",
+    },
+    create: {
+      productId: oneplus13.id,
+      specificationId: camera.id,
+      customValue: "50MP + 50MP + 50MP",
+    },
+  });
+
+
+    const specificationCount =
+    await prisma.productSpecification.count();
+
+  console.log(
+    `📊 Product specifications seeded: ${specificationCount}`,
+  );
+
   // ─────────────────────────────────────────────
   // PRICES
   // ─────────────────────────────────────────────
