@@ -210,3 +210,150 @@ export const getProductBySlug = async (
     });
   }
 };
+
+
+export const getProductPrices = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const slug = Array.isArray(req.params.slug)
+      ? req.params.slug[0]
+      : req.params.slug;
+
+    if (!slug) {
+      res.status(400).json({
+        success: false,
+        message: "Product slug is required",
+      });
+      return;
+    }
+
+    const product = await prisma.product.findUnique({
+      where: {
+        slug,
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+      },
+    });
+
+    if (!product) {
+      res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+      return;
+    }
+
+    const prices = await prisma.price.findMany({
+      where: {
+        productId: product.id,
+        inStock: true,
+      },
+      include: {
+        seller: true,
+        variant: true,
+      },
+      orderBy: {
+        amount: "asc",
+      },
+    });
+
+    const lowestPrice = prices[0]?.amount ?? null;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        product,
+        lowestPrice,
+        prices,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to fetch product prices:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch product prices",
+    });
+  }
+};
+
+export const getProductPriceHistory = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const slug = Array.isArray(req.params.slug)
+      ? req.params.slug[0]
+      : req.params.slug;
+
+    if (!slug) {
+      res.status(400).json({
+        success: false,
+        message: "Product slug is required",
+      });
+      return;
+    }
+
+    const product = await prisma.product.findUnique({
+      where: {
+        slug,
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+      },
+    });
+
+    if (!product) {
+      res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+      return;
+    }
+
+    const priceHistory = await prisma.price.findMany({
+      where: {
+        productId: product.id,
+      },
+      include: {
+        seller: true,
+        variant: true,
+      },
+      orderBy: {
+        recordedAt: "asc",
+      },
+    });
+
+    const lowestPrice =
+      priceHistory.length > 0
+        ? priceHistory.reduce(
+            (lowest, current) =>
+              current.amount.lessThan(lowest) ? current.amount : lowest,
+            priceHistory[0]!.amount,
+          )
+        : null;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        product,
+        lowestHistoricalPrice: lowestPrice,
+        history: priceHistory,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to fetch price history:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch price history",
+    });
+  }
+};
