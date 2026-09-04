@@ -1,34 +1,44 @@
 import { Request, Response } from "express";
 
-export const uploadProductImage = (
+export const uploadProductImages = (
   req: Request,
   res: Response,
 ) => {
   try {
-    if (!req.file) {
+    const files = req.files as Express.Multer.File[] | undefined;
+
+    if (!files || files.length === 0) {
       res.status(400).json({
         success: false,
-        message: "Product image is required",
+        message: "At least one product image is required",
       });
       return;
     }
 
-    const imageUrl = `/uploads/products/${req.file.filename}`;
+    const images = files.map((file, index) => ({
+      url: `/uploads/products/${file.filename}`,
+      filename: file.filename,
+      originalName: file.originalname,
+      sortOrder: index,
+      isPrimary: index === 0,
+    }));
 
     res.status(201).json({
       success: true,
-      message: "Product image uploaded successfully",
-      data: {
-        url: imageUrl,
-        filename: req.file.filename,
-      },
+      message: `${images.length} product image${
+        images.length > 1 ? "s" : ""
+      } uploaded successfully`,
+      data: images,
     });
   } catch (error) {
-    console.error("Failed to upload product image:", error);
+    console.error(
+      "Failed to upload product images:",
+      error,
+    );
 
     res.status(500).json({
       success: false,
-      message: "Failed to upload product image",
+      message: "Failed to upload product images",
     });
   }
 };

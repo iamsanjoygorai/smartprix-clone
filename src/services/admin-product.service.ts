@@ -5,15 +5,15 @@ export const createAdminProduct = async (
   input: CreateProductInput,
 ) => {
   const {
-    name,
-    description,
-    brandSlug,
-    categorySlug,
-    image,
-    price,
-    sellerSlug,
-    specifications,
-  } = input;
+  name,
+  description,
+  brandSlug,
+  categorySlug,
+  images,
+  price,
+  sellerSlug,
+  specifications,
+} = input;
 
   const brand = await prisma.brand.findUnique({
     where: { slug: brandSlug },
@@ -57,15 +57,18 @@ export const createAdminProduct = async (
       },
     });
 
-    if (image) {
-      await tx.productImage.create({
-        data: {
-          productId: product.id,
-          url: image,
-          sortOrder: 0,
-        },
-      });
-    }
+    if (images && images.length > 0) {
+  for (const [index, image] of images.entries()) {
+    await tx.productImage.create({
+      data: {
+        productId: product.id,
+        url: image,
+        sortOrder: index,
+        isPrimary: index === 0,
+      },
+    });
+  }
+}
 
     await tx.price.create({
       data: {

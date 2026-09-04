@@ -12,10 +12,9 @@ export const createProductSchema = z.object({
 
   categorySlug: z.string().trim().min(1, "Category is required"),
 
-  image: z
-    .string()
-    .trim()
-    .url("Image must be a valid URL")
+  images: z
+    .array(z.string().trim().min(1))
+    .max(10, "Maximum 10 images are allowed")
     .optional(),
 
   price: z
@@ -29,4 +28,5 @@ export const createProductSchema = z.object({
     .default({}),
 });
 
-export type CreateProductInput = z.infer<typeof createProductSchema>;
+export type CreateProductInput =
+  z.infer<typeof createProductSchema>;

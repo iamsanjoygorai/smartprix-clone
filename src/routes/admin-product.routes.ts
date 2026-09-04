@@ -6,7 +6,7 @@ import { getAdminProduct } from "../controllers/admin-product-get.controller";
 import { updateProduct } from "../controllers/admin-product-update.controller";
 import { deleteProduct } from "../controllers/admin-product-delete.controller";
 import { restoreProduct } from "../controllers/admin-product-restore.controller";
-import { uploadProductImage } from "../controllers/admin-product-image.controller";
+import { uploadProductImages } from "../controllers/admin-product-image.controller";
 
 import { productImageUpload } from "../middlewares/upload.middleware";
 
@@ -15,9 +15,9 @@ const router = Router();
 router.get("/products", getAllAdminProducts);
 
 router.post(
-  "/products/upload-image",
-  productImageUpload.single("image"),
-  uploadProductImage,
+  "/products/upload-images",
+  productImageUpload.array("images", 10),
+  uploadProductImages,
 );
 
 router.post("/products", createProduct);
