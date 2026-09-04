@@ -347,3 +347,60 @@ model PriceAlert {
   @@index([productId])
   @@index([isActive])
 }
+
+
+
+// ─────────────────────────────────────────────
+// NEWS
+// ─────────────────────────────────────────────
+
+model News {
+  id String @id @default(cuid())
+
+  title          String
+  slug           String  @unique
+  authorName     String
+  featuredImage  String?
+
+  status       String   @default("DRAFT")
+  publishedAt  DateTime?
+
+  allowLikes    Boolean @default(true)
+  allowComments Boolean @default(true)
+  allowSharing  Boolean @default(true)
+
+  likeCount    Int @default(0)
+  commentCount Int @default(0)
+  shareCount   Int @default(0)
+
+  blocks NewsBlock[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([publishedAt])
+  @@index([createdAt])
+}
+
+
+// ─────────────────────────────────────────────
+// NEWS CONTENT BLOCKS
+// ─────────────────────────────────────────────
+
+model NewsBlock {
+  id String @id @default(cuid())
+
+  newsId String
+  news   News @relation(fields: [newsId], references: [id], onDelete: Cascade)
+
+  type     String
+  position Int
+  content  Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([newsId])
+  @@index([newsId, position])
+}
