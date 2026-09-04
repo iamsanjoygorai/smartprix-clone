@@ -262,29 +262,15 @@ async function main() {
     },
   });
 
-  const launchDate = await prisma.specification.upsert({
-  where: { slug: "launch-date" },
-  update: {},
-  create: {
-    name: "Launch Date",
-    slug: "launch-date",
-    dataType: "text",
-  },
-});
 
-const announcedDate = await prisma.specification.upsert({
-  where: { slug: "announced-date" },
-  update: {},
-  create: {
-    name: "Announced Date",
-    slug: "announced-date",
-    dataType: "text",
-  },
-});
+
+ 
 
 
 const specificationDefinitions = [
-  // General
+  // ─────────────────────────────────────────────
+  // GENERAL
+  // ─────────────────────────────────────────────
   ["Launch Date", "launch-date"],
   ["Announced Date", "announced-date"],
   ["Operating System", "operating-system"],
@@ -296,7 +282,9 @@ const specificationDefinitions = [
   ["4G", "4g"],
   ["Model Number", "model-number"],
 
-  // Design
+  // ─────────────────────────────────────────────
+  // DESIGN
+  // ─────────────────────────────────────────────
   ["Height", "height"],
   ["Width", "width"],
   ["Thickness", "thickness"],
@@ -308,7 +296,9 @@ const specificationDefinitions = [
   ["IP Rating", "ip-rating"],
   ["Colors", "colors"],
 
-  // Display
+  // ─────────────────────────────────────────────
+  // DISPLAY
+  // ─────────────────────────────────────────────
   ["Display Type", "display-type"],
   ["Screen Size", "screen-size"],
   ["Resolution", "resolution"],
@@ -322,27 +312,36 @@ const specificationDefinitions = [
   ["Always On Display", "always-on-display"],
   ["Screen-to-Body Ratio", "screen-to-body-ratio"],
 
-  // Performance
+  // ─────────────────────────────────────────────
+  // PERFORMANCE
+  // ─────────────────────────────────────────────
   ["Processor", "processor"],
   ["CPU", "cpu"],
+  ["Chipset", "chipset"],
   ["CPU Architecture", "cpu-architecture"],
   ["CPU Speed", "cpu-speed"],
   ["CPU Cores", "cpu-cores"],
   ["GPU", "gpu"],
-  ["Chipset", "chipset"],
   ["Cooling System", "cooling-system"],
   ["AnTuTu Score", "antutu-score"],
-  ["Geekbench Single Core", "geekbench-single-core"],
+
+  // IMPORTANT:
+  // These slugs must match the admin form.
+  ["Geekbench Single Core", "geekbench-single"],
   ["Geekbench Multi Core", "geekbench-multi"],
 
-  // Memory
+  // ─────────────────────────────────────────────
+  // MEMORY
+  // ─────────────────────────────────────────────
   ["RAM", "ram"],
   ["Internal Storage", "internal-storage"],
   ["Storage Type", "storage-type"],
   ["Memory Card", "memory-card"],
   ["Expandable Storage", "expandable-storage"],
 
-  // Camera
+  // ─────────────────────────────────────────────
+  // CAMERA
+  // ─────────────────────────────────────────────
   ["Rear Camera", "rear-camera"],
   ["Main Camera", "main-camera"],
   ["Ultra Wide", "ultra-wide"],
@@ -355,7 +354,9 @@ const specificationDefinitions = [
   ["Flash", "flash"],
   ["Front Camera", "front-camera"],
 
-  // Video
+  // ─────────────────────────────────────────────
+  // VIDEO
+  // ─────────────────────────────────────────────
   ["Rear Video", "rear-video"],
   ["Front Video", "front-video"],
   ["8K Video", "8k-video"],
@@ -363,9 +364,11 @@ const specificationDefinitions = [
   ["Slow Motion", "slow-motion"],
   ["Video Stabilization", "video-stabilization"],
 
-  // Connectivity
-  ["Wi-Fi", "wi-fi"],
-  ["Wi-Fi Version", "wi-fi-version"],
+  // ─────────────────────────────────────────────
+  // CONNECTIVITY
+  // ─────────────────────────────────────────────
+  ["Wi-Fi", "wifi"],
+  ["Wi-Fi Version", "wifi-version"],
   ["Bluetooth", "bluetooth"],
   ["Bluetooth Version", "bluetooth-version"],
   ["NFC", "nfc"],
@@ -376,7 +379,9 @@ const specificationDefinitions = [
   ["Infrared", "infrared"],
   ["Headphone Jack", "headphone-jack"],
 
-  // Battery
+  // ─────────────────────────────────────────────
+  // BATTERY
+  // ─────────────────────────────────────────────
   ["Battery Capacity", "battery-capacity"],
   ["Battery Type", "battery-type"],
   ["Removable Battery", "removable-battery"],
@@ -386,24 +391,30 @@ const specificationDefinitions = [
   ["Wireless Charging Wattage", "wireless-charging-wattage"],
   ["Reverse Wireless Charging", "reverse-wireless-charging"],
 
-  // Software
+  // ─────────────────────────────────────────────
+  // SOFTWARE
+  // ─────────────────────────────────────────────
   ["Android Version", "android-version"],
   ["UI", "ui"],
   ["Major Android Updates", "major-android-updates"],
   ["Security Updates", "security-updates"],
   ["Update Support Until", "update-support-until"],
 
-  // Features
+  // ─────────────────────────────────────────────
+  // FEATURES
+  // ─────────────────────────────────────────────
   ["Fingerprint Sensor", "fingerprint-sensor"],
   ["Face Unlock", "face-unlock"],
   ["Stereo Speakers", "stereo-speakers"],
   ["Dolby Atmos", "dolby-atmos"],
   ["Dual SIM", "dual-sim"],
   ["eSIM", "esim"],
-  ["FM Radio", "fm-radio"],
   ["Desktop Mode", "desktop-mode"],
+  ["FM Radio", "fm-radio"],
 
-  // Sensors
+  // ─────────────────────────────────────────────
+  // SENSORS
+  // ─────────────────────────────────────────────
   ["Accelerometer", "accelerometer"],
   ["Gyroscope", "gyroscope"],
   ["Proximity", "proximity"],
@@ -411,7 +422,9 @@ const specificationDefinitions = [
   ["Barometer", "barometer"],
   ["Ambient Light Sensor", "ambient-light-sensor"],
 
+  // ─────────────────────────────────────────────
   // AI
+  // ─────────────────────────────────────────────
   ["AI Assistant", "ai-assistant"],
   ["Circle to Search", "circle-to-search"],
   ["AI Eraser", "ai-eraser"],
@@ -425,20 +438,20 @@ const specificationDefinitions = [
 ];
 
 for (const [name, slug] of specificationDefinitions) {
-  await prisma.specification.upsert({
-    where: {
-      slug,
-    },
-    update: {
-      name,
-      dataType: "text",
-    },
-    create: {
-      name,
-      slug,
-      dataType: "text",
-    },
-  });
+ await prisma.specification.upsert({
+  where: {
+    slug: "wifi-version",
+  },
+  update: {
+    name: "Wi-Fi Version",
+    dataType: "text",
+  },
+  create: {
+    name: "Wi-Fi Version",
+    slug: "wifi-version",
+    dataType: "text",
+  },
+});
 }
 
 

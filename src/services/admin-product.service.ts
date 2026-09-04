@@ -1,22 +1,25 @@
 import prisma from "../db/prisma";
+
 import type { CreateProductInput } from "../validators/product.validator";
 
 export const createAdminProduct = async (
   input: CreateProductInput,
 ) => {
   const {
-  name,
-  description,
-  brandSlug,
-  categorySlug,
-  images,
-  price,
-  sellerSlug,
-  specifications,
-} = input;
+    name,
+    description,
+    brandSlug,
+    categorySlug,
+    images,
+    price,
+    sellerSlug,
+    specifications,
+  } = input;
 
   const brand = await prisma.brand.findUnique({
-    where: { slug: brandSlug },
+    where: {
+      slug: brandSlug,
+    },
   });
 
   if (!brand) {
@@ -24,7 +27,9 @@ export const createAdminProduct = async (
   }
 
   const category = await prisma.category.findUnique({
-    where: { slug: categorySlug },
+    where: {
+      slug: categorySlug,
+    },
   });
 
   if (!category) {
@@ -32,7 +37,9 @@ export const createAdminProduct = async (
   }
 
   const seller = await prisma.seller.findUnique({
-    where: { slug: sellerSlug },
+    where: {
+      slug: sellerSlug,
+    },
   });
 
   if (!seller) {
@@ -46,6 +53,12 @@ export const createAdminProduct = async (
     .replace(/^-|-$/g, "")}-${Date.now()}`;
 
   return prisma.$transaction(async (tx) => {
+    /*
+     * ------------------------------------------------
+     * CREATE PRODUCT
+     * ------------------------------------------------
+     */
+
     const product = await tx.product.create({
       data: {
         name,
@@ -57,18 +70,30 @@ export const createAdminProduct = async (
       },
     });
 
+    /*
+     * ------------------------------------------------
+     * CREATE PRODUCT IMAGES
+     * ------------------------------------------------
+     */
+
     if (images && images.length > 0) {
-  for (const [index, image] of images.entries()) {
-    await tx.productImage.create({
-      data: {
-        productId: product.id,
-        url: image,
-        sortOrder: index,
-        isPrimary: index === 0,
-      },
-    });
-  }
-}
+      for (const [index, image] of images.entries()) {
+        await tx.productImage.create({
+          data: {
+            productId: product.id,
+            url: image,
+            sortOrder: index,
+            isPrimary: index === 0,
+          },
+        });
+      }
+    }
+
+    /*
+     * ------------------------------------------------
+     * CREATE PRODUCT PRICE
+     * ------------------------------------------------
+     */
 
     await tx.price.create({
       data: {
@@ -80,14 +105,36 @@ export const createAdminProduct = async (
       },
     });
 
-    for (const [specificationSlug, specificationValue] of Object.entries(
-      specifications,
-    )) {
-      const specification = await tx.specification.findUnique({
-        where: {
-          slug: specificationSlug,
-        },
-      });
+    /*
+     * ------------------------------------------------
+     * CREATE PRODUCT SPECIFICATIONS
+     * ------------------------------------------------
+     */
+
+    for (const [
+      specificationSlug,
+      specificationValue,
+    ] of Object.entries(specifications ?? {})) {
+      /*
+       * Ignore empty values.
+       */
+      if (
+        specificationValue === undefined ||
+        specificationValue === null ||
+        specificationValue === ""
+      ) {
+        continue;
+      }
+
+      /*
+       * Find specification definition.
+       */
+      const specification =
+        await tx.specification.findUnique({
+          where: {
+            slug: specificationSlug,
+          },
+        });
 
       if (!specification) {
         throw new Error(
@@ -95,22 +142,40 @@ export const createAdminProduct = async (
         );
       }
 
-      let value = await tx.specificationValue.findFirst({
-        where: {
-          specificationId: specification.id,
-          value: specificationValue,
-        },
-      });
+      /*
+       * Convert value to string because
+       * SpecificationValue.value is stored as text.
+       */
+      const normalizedValue = String(specificationValue);
 
-      if (!value) {
-        value = await tx.specificationValue.create({
-          data: {
+      /*
+       * Check whether this specification value
+       * already exists.
+       */
+      let value =
+        await tx.specificationValue.findFirst({
+          where: {
             specificationId: specification.id,
-            value: specificationValue,
+            value: normalizedValue,
           },
         });
+
+      /*
+       * Create specification value if it doesn't exist.
+       */
+      if (!value) {
+        value =
+          await tx.specificationValue.create({
+            data: {
+              specificationId: specification.id,
+              value: normalizedValue,
+            },
+          });
       }
 
+      /*
+       * Create product -> specification relation.
+       */
       await tx.productSpecification.create({
         data: {
           productId: product.id,
@@ -120,20 +185,34 @@ export const createAdminProduct = async (
       });
     }
 
+    /*
+     * ------------------------------------------------
+     * RETURN COMPLETE PRODUCT
+     * ------------------------------------------------
+     */
+
     return tx.product.findUnique({
       where: {
         id: product.id,
       },
+
       include: {
         brand: true,
         category: true,
-        images: true,
+
+        images: {
+          orderBy: {
+            sortOrder: "asc",
+          },
+        },
+
         specifications: {
           include: {
             specification: true,
             value: true,
           },
         },
+
         prices: {
           include: {
             seller: true,
