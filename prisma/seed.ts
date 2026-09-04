@@ -262,6 +262,186 @@ async function main() {
     },
   });
 
+  const launchDate = await prisma.specification.upsert({
+  where: { slug: "launch-date" },
+  update: {},
+  create: {
+    name: "Launch Date",
+    slug: "launch-date",
+    dataType: "text",
+  },
+});
+
+const announcedDate = await prisma.specification.upsert({
+  where: { slug: "announced-date" },
+  update: {},
+  create: {
+    name: "Announced Date",
+    slug: "announced-date",
+    dataType: "text",
+  },
+});
+
+
+const specificationDefinitions = [
+  // General
+  ["Launch Date", "launch-date"],
+  ["Announced Date", "announced-date"],
+  ["Operating System", "operating-system"],
+  ["OS Version", "os-version"],
+  ["SIM Type", "sim-type"],
+  ["Number of SIMs", "number-of-sims"],
+  ["Network", "network"],
+  ["5G", "5g"],
+  ["4G", "4g"],
+  ["Model Number", "model-number"],
+
+  // Design
+  ["Height", "height"],
+  ["Width", "width"],
+  ["Thickness", "thickness"],
+  ["Weight", "weight"],
+  ["Build Material", "build-material"],
+  ["Frame Material", "frame-material"],
+  ["Back Material", "back-material"],
+  ["Water Resistance", "water-resistance"],
+  ["IP Rating", "ip-rating"],
+  ["Colors", "colors"],
+
+  // Display
+  ["Display Type", "display-type"],
+  ["Screen Size", "screen-size"],
+  ["Resolution", "resolution"],
+  ["Resolution Type", "resolution-type"],
+  ["Refresh Rate", "refresh-rate"],
+  ["Touch Sampling Rate", "touch-sampling-rate"],
+  ["Peak Brightness", "peak-brightness"],
+  ["HDR", "hdr"],
+  ["HDR10+", "hdr10-plus"],
+  ["Display Protection", "display-protection"],
+  ["Always On Display", "always-on-display"],
+  ["Screen-to-Body Ratio", "screen-to-body-ratio"],
+
+  // Performance
+  ["Processor", "processor"],
+  ["CPU", "cpu"],
+  ["CPU Architecture", "cpu-architecture"],
+  ["CPU Speed", "cpu-speed"],
+  ["CPU Cores", "cpu-cores"],
+  ["GPU", "gpu"],
+  ["Chipset", "chipset"],
+  ["Cooling System", "cooling-system"],
+  ["AnTuTu Score", "antutu-score"],
+  ["Geekbench Single Core", "geekbench-single-core"],
+  ["Geekbench Multi Core", "geekbench-multi"],
+
+  // Memory
+  ["RAM", "ram"],
+  ["Internal Storage", "internal-storage"],
+  ["Storage Type", "storage-type"],
+  ["Memory Card", "memory-card"],
+  ["Expandable Storage", "expandable-storage"],
+
+  // Camera
+  ["Rear Camera", "rear-camera"],
+  ["Main Camera", "main-camera"],
+  ["Ultra Wide", "ultra-wide"],
+  ["Telephoto", "telephoto"],
+  ["Periscope", "periscope"],
+  ["Macro", "macro"],
+  ["OIS", "ois"],
+  ["Autofocus", "autofocus"],
+  ["Laser Autofocus", "laser-autofocus"],
+  ["Flash", "flash"],
+  ["Front Camera", "front-camera"],
+
+  // Video
+  ["Rear Video", "rear-video"],
+  ["Front Video", "front-video"],
+  ["8K Video", "8k-video"],
+  ["4K Video", "4k-video"],
+  ["Slow Motion", "slow-motion"],
+  ["Video Stabilization", "video-stabilization"],
+
+  // Connectivity
+  ["Wi-Fi", "wi-fi"],
+  ["Wi-Fi Version", "wi-fi-version"],
+  ["Bluetooth", "bluetooth"],
+  ["Bluetooth Version", "bluetooth-version"],
+  ["NFC", "nfc"],
+  ["GPS", "gps"],
+  ["USB Type", "usb-type"],
+  ["USB Version", "usb-version"],
+  ["USB OTG", "usb-otg"],
+  ["Infrared", "infrared"],
+  ["Headphone Jack", "headphone-jack"],
+
+  // Battery
+  ["Battery Capacity", "battery-capacity"],
+  ["Battery Type", "battery-type"],
+  ["Removable Battery", "removable-battery"],
+  ["Fast Charging", "fast-charging"],
+  ["Charging Wattage", "charging-wattage"],
+  ["Wireless Charging", "wireless-charging"],
+  ["Wireless Charging Wattage", "wireless-charging-wattage"],
+  ["Reverse Wireless Charging", "reverse-wireless-charging"],
+
+  // Software
+  ["Android Version", "android-version"],
+  ["UI", "ui"],
+  ["Major Android Updates", "major-android-updates"],
+  ["Security Updates", "security-updates"],
+  ["Update Support Until", "update-support-until"],
+
+  // Features
+  ["Fingerprint Sensor", "fingerprint-sensor"],
+  ["Face Unlock", "face-unlock"],
+  ["Stereo Speakers", "stereo-speakers"],
+  ["Dolby Atmos", "dolby-atmos"],
+  ["Dual SIM", "dual-sim"],
+  ["eSIM", "esim"],
+  ["FM Radio", "fm-radio"],
+  ["Desktop Mode", "desktop-mode"],
+
+  // Sensors
+  ["Accelerometer", "accelerometer"],
+  ["Gyroscope", "gyroscope"],
+  ["Proximity", "proximity"],
+  ["Compass", "compass"],
+  ["Barometer", "barometer"],
+  ["Ambient Light Sensor", "ambient-light-sensor"],
+
+  // AI
+  ["AI Assistant", "ai-assistant"],
+  ["Circle to Search", "circle-to-search"],
+  ["AI Eraser", "ai-eraser"],
+  ["Generative Edit", "generative-edit"],
+  ["Live Translate", "live-translate"],
+  ["Interpreter", "interpreter"],
+  ["Writing Assist", "writing-assist"],
+  ["Note Assist", "note-assist"],
+  ["Transcript Assist", "transcript-assist"],
+  ["Browsing Assist", "browsing-assist"],
+];
+
+for (const [name, slug] of specificationDefinitions) {
+  await prisma.specification.upsert({
+    where: {
+      slug,
+    },
+    update: {
+      name,
+      dataType: "text",
+    },
+    create: {
+      name,
+      slug,
+      dataType: "text",
+    },
+  });
+}
+
+
   // ─────────────────────────────────────────────
   // SPECIFICATION VALUES
   // ─────────────────────────────────────────────
