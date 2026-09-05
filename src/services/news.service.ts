@@ -13,6 +13,40 @@ function createSlug(title: string) {
     .replace(/^-|-$/g, "")}-${Date.now()}`;
 }
 
+function extractFirstImageFromBlocks(
+  blocks?: CreateNewsInput["blocks"] | UpdateNewsInput["blocks"],
+): string | null {
+  if (!blocks || blocks.length === 0) {
+    return null;
+  }
+
+  const sortedBlocks = [...blocks].sort(
+    (a, b) => a.position - b.position,
+  );
+
+  for (const block of sortedBlocks) {
+    if (block.type !== "rich-text") {
+      continue;
+    }
+
+    const content = block.content as {
+      html?: string;
+    };
+
+    const html = content?.html ?? "";
+
+    const match = html.match(
+      /<img[^>]+src=["']([^"']+)["']/i,
+    );
+
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+
+  return null;
+}
+
 export const createNews = async (
   input: CreateNewsInput,
 ) => {
@@ -29,6 +63,7 @@ export const createNews = async (
   } = input;
 
   const slug = createSlug(title);
+  const firstImage = extractFirstImageFromBlocks(blocks);
 
   return prisma.$transaction(async (tx) => {
     const news = await tx.news.create({
@@ -36,7 +71,7 @@ export const createNews = async (
         title,
         slug,
         authorName,
-        featuredImage,
+           featuredImage: firstImage,
 
         status,
 
@@ -198,6 +233,11 @@ export const updateNews = async (
     categoryIds,
   } = input;
 
+  const firstImage =
+  blocks !== undefined
+    ? extractFirstImageFromBlocks(blocks)
+    : undefined;
+
   return prisma.$transaction(async (tx) => {
     await tx.news.update({
       where: {
@@ -213,9 +253,9 @@ export const updateNews = async (
           authorName,
         }),
 
-        ...(featuredImage !== undefined && {
-          featuredImage,
-        }),
+        ...(blocks !== undefined && {
+  featuredImage: firstImage,
+}),
 
         ...(status !== undefined && {
           status,
