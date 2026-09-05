@@ -231,10 +231,42 @@ export const deleteNewsPost = async (
 
 
 // ─────────────────────────────────────────────
-// PUBLIC NEWS
+// PUBLIC NEWS LIST
 // ─────────────────────────────────────────────
 
 export const getPublicNews = async (
+  _req: Request,
+  res: Response,
+) => {
+  try {
+    const news = await getAllNews();
+
+    const publishedNews = news.filter(
+      (post) => post.status === "PUBLISHED",
+    );
+
+    res.status(200).json({
+      success: true,
+      data: publishedNews,
+    });
+  } catch (error) {
+    console.error(
+      "Failed to fetch public news:",
+      error,
+    );
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch news",
+    });
+  }
+};
+
+// ─────────────────────────────────────────────
+// PUBLIC NEWS BY SLUG
+// ─────────────────────────────────────────────
+
+export const getPublicNewsBySlug = async (
   req: Request,
   res: Response,
 ) => {
@@ -248,7 +280,6 @@ export const getPublicNews = async (
         success: false,
         message: "News not found",
       });
-
       return;
     }
 

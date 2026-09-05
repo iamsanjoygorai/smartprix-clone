@@ -2,20 +2,24 @@ import { z } from "zod";
 
 const newsBlockSchema = z.object({
   id: z.string().optional(),
-
   type: z.string().min(1),
-
   position: z.number().int().min(0),
-
   content: z.unknown(),
 });
 
 export const createNewsSchema = z.object({
   title: z.string().trim().min(1).max(300),
 
-  authorName: z.string().trim().min(1).max(150),
+  authorName: z
+    .string()
+    .trim()
+    .min(1)
+    .max(150),
 
-  featuredImage: z.string().trim().optional(),
+  featuredImage: z
+    .string()
+    .trim()
+    .optional(),
 
   status: z
     .enum(["DRAFT", "PUBLISHED"])
@@ -23,11 +27,22 @@ export const createNewsSchema = z.object({
 
   allowLikes: z.boolean().default(true),
 
-  allowComments: z.boolean().default(true),
+  allowComments: z
+    .boolean()
+    .default(true),
 
-  allowSharing: z.boolean().default(true),
+  allowSharing: z
+    .boolean()
+    .default(true),
 
-  blocks: z.array(newsBlockSchema).default([]),
+  blocks: z
+    .array(newsBlockSchema)
+    .default([]),
+
+  // NEW
+  categoryIds: z
+    .array(z.string())
+    .default([]),
 });
 
 export const updateNewsSchema =

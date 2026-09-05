@@ -10,13 +10,11 @@ import newsRoutes from "./news.routes";
 import authRoutes from "./auth.routes";
 import sellerRoutes from "./seller.routes";
 
-import {
-  requireAuth,
-} from "../middlewares/auth.middleware";
+import { requireAuth } from "../middlewares/auth.middleware";
+import { requireAdmin } from "../middlewares/admin.middleware";
 
-import {
-  requireAdmin,
-} from "../middlewares/admin.middleware";
+import adminNewsCategoryRoutes from "./admin-news-category.routes";
+import adminMediaRoutes from "./admin-media.routes";
 
 const router = Router();
 
@@ -66,6 +64,24 @@ router.use(
   adminProductRoutes,
 );
 
+// IMPORTANT:
+// More specific News category route must come
+// before the generic /admin News route.
+router.use(
+  "/admin/news/categories",
+  requireAuth,
+  requireAdmin,
+  adminNewsCategoryRoutes,
+);
+
+router.use(
+  "/admin/media",
+  requireAuth,
+  requireAdmin,
+  adminMediaRoutes,
+);
+
+// Admin News
 router.use(
   "/admin",
   requireAuth,
@@ -77,5 +93,8 @@ router.use(
   "/auth",
   authRoutes,
 );
+
+
+router.use("/news", newsRoutes);
 
 export default router;

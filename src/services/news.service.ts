@@ -25,6 +25,7 @@ export const createNews = async (
     allowComments,
     allowSharing,
     blocks,
+    categoryIds,
   } = input;
 
   const slug = createSlug(title);
@@ -36,17 +37,21 @@ export const createNews = async (
         slug,
         authorName,
         featuredImage,
+
         status,
+
         publishedAt:
           status === "PUBLISHED"
             ? new Date()
             : null,
+
         allowLikes,
         allowComments,
         allowSharing,
       },
     });
 
+    // Create news blocks
     if (blocks && blocks.length > 0) {
       await tx.newsBlock.createMany({
         data: blocks.map((block, index) => ({
@@ -58,21 +63,43 @@ export const createNews = async (
       });
     }
 
+    // Create category relationships
+    if (
+      categoryIds &&
+      categoryIds.length > 0
+    ) {
+      await tx.newsCategoryPost.createMany({
+        data: categoryIds.map(
+          (categoryId) => ({
+            newsId: news.id,
+            categoryId,
+          }),
+        ),
+        skipDuplicates: true,
+      });
+    }
+
     return tx.news.findUnique({
       where: {
         id: news.id,
       },
+
       include: {
         blocks: {
           orderBy: {
             position: "asc",
           },
         },
+
+        categories: {
+          include: {
+            category: true,
+          },
+        },
       },
     });
   });
 };
-
 
 export const getNewsById = async (
   id: string,
@@ -81,16 +108,22 @@ export const getNewsById = async (
     where: {
       id,
     },
+
     include: {
       blocks: {
         orderBy: {
           position: "asc",
         },
       },
+
+      categories: {
+        include: {
+          category: true,
+        },
+      },
     },
   });
 };
-
 
 export const getNewsBySlug = async (
   slug: string,
@@ -99,42 +132,55 @@ export const getNewsBySlug = async (
     where: {
       slug,
     },
+
     include: {
       blocks: {
         orderBy: {
           position: "asc",
         },
       },
+
+      categories: {
+        include: {
+          category: true,
+        },
+      },
     },
   });
 };
-
 
 export const getAllNews = async () => {
   return prisma.news.findMany({
     orderBy: {
       createdAt: "desc",
     },
+
     include: {
       blocks: {
         orderBy: {
           position: "asc",
         },
       },
+
+      categories: {
+        include: {
+          category: true,
+        },
+      },
     },
   });
 };
-
 
 export const updateNews = async (
   id: string,
   input: UpdateNewsInput,
 ) => {
-  const existing = await prisma.news.findUnique({
-    where: {
-      id,
-    },
-  });
+  const existing =
+    await prisma.news.findUnique({
+      where: {
+        id,
+      },
+    });
 
   if (!existing) {
     throw new Error("News not found");
@@ -149,6 +195,7 @@ export const updateNews = async (
     allowComments,
     allowSharing,
     blocks,
+    categoryIds,
   } = input;
 
   return prisma.$transaction(async (tx) => {
@@ -156,8 +203,11 @@ export const updateNews = async (
       where: {
         id,
       },
+
       data: {
-        ...(title !== undefined && { title }),
+        ...(title !== undefined && {
+          title,
+        }),
 
         ...(authorName !== undefined && {
           authorName,
@@ -169,6 +219,7 @@ export const updateNews = async (
 
         ...(status !== undefined && {
           status,
+
           publishedAt:
             status === "PUBLISHED"
               ? existing.publishedAt ??
@@ -190,6 +241,7 @@ export const updateNews = async (
       },
     });
 
+    // Replace blocks
     if (blocks !== undefined) {
       await tx.newsBlock.deleteMany({
         where: {
@@ -199,12 +251,35 @@ export const updateNews = async (
 
       if (blocks.length > 0) {
         await tx.newsBlock.createMany({
-          data: blocks.map((block, index) => ({
-            newsId: id,
-            type: block.type,
-            position: index,
-            content: block.content as any,
-          })),
+          data: blocks.map(
+            (block, index) => ({
+              newsId: id,
+              type: block.type,
+              position: index,
+              content: block.content as any,
+            }),
+          ),
+        });
+      }
+    }
+
+    // Replace categories
+    if (categoryIds !== undefined) {
+      await tx.newsCategoryPost.deleteMany({
+        where: {
+          newsId: id,
+        },
+      });
+
+      if (categoryIds.length > 0) {
+        await tx.newsCategoryPost.createMany({
+          data: categoryIds.map(
+            (categoryId) => ({
+              newsId: id,
+              categoryId,
+            }),
+          ),
+          skipDuplicates: true,
         });
       }
     }
@@ -213,10 +288,17 @@ export const updateNews = async (
       where: {
         id,
       },
+
       include: {
         blocks: {
           orderBy: {
             position: "asc",
+          },
+        },
+
+        categories: {
+          include: {
+            category: true,
           },
         },
       },
@@ -224,15 +306,15 @@ export const updateNews = async (
   });
 };
 
-
 export const deleteNews = async (
   id: string,
 ) => {
-  const news = await prisma.news.findUnique({
-    where: {
-      id,
-    },
-  });
+  const news =
+    await prisma.news.findUnique({
+      where: {
+        id,
+      },
+    });
 
   if (!news) {
     throw new Error("News not found");
