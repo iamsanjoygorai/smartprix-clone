@@ -8,6 +8,7 @@ import {
 import {
   createNews,
   deleteNews,
+  deleteNewsBulk,
   getAllNews,
   getNewsById,
   getNewsBySlug,
@@ -225,6 +226,63 @@ export const deleteNewsPost = async (
     res.status(500).json({
       success: false,
       message: "Failed to delete news",
+    });
+  }
+};
+
+
+// ─────────────────────────────────────────────
+// BULK DELETE NEWS
+// ─────────────────────────────────────────────
+
+export const deleteNewsBulkPost = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "No news posts selected",
+      });
+      return;
+    }
+
+    const validIds = ids.filter(
+      (id): id is string =>
+        typeof id === "string" && id.trim().length > 0,
+    );
+
+    if (validIds.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid news post IDs",
+      });
+      return;
+    }
+
+    const deletedCount = await deleteNewsBulk(validIds);
+
+    res.status(200).json({
+      success: true,
+      message: `${deletedCount} news post${
+        deletedCount === 1 ? "" : "s"
+      } deleted successfully`,
+      data: {
+        deletedCount,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "Failed to bulk delete news:",
+      error,
+    );
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete selected news posts",
     });
   }
 };

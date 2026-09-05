@@ -3,6 +3,7 @@ import { Router } from "express";
 import {
   createNewsPost,
   deleteNewsPost,
+  deleteNewsBulkPost,
   getAdminNews,
   getAdminNewsById,
   updateNewsPost,
@@ -13,6 +14,11 @@ const router = Router();
 router.get("/news", getAdminNews);
 
 router.post("/news", createNewsPost);
+
+router.delete(
+  "/news/bulk",
+  deleteNewsBulkPost,
+);
 
 router.get(
   "/news/:id",

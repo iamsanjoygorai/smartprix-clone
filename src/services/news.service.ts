@@ -368,3 +368,19 @@ export const deleteNews = async (
 
   return news;
 };
+
+export const deleteNewsBulk = async (ids: string[]) => {
+  if (ids.length === 0) {
+    throw new Error("No news posts selected");
+  }
+
+  const result = await prisma.news.deleteMany({
+    where: {
+      id: {
+        in: ids,
+      },
+    },
+  });
+
+  return result.count;
+};
