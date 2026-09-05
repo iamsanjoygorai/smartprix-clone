@@ -404,17 +404,26 @@ model NewsBlock {
 }
 
 model NewsCategory {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  slug        String   @unique
+  id          String  @id @default(cuid())
+  name        String  @unique
+  slug        String  @unique
   description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+
+  parentId String?
+
+  parent   NewsCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children NewsCategory[] @relation("CategoryHierarchy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   posts NewsCategoryPost[]
 
   @@index([name])
+  @@index([createdAt])
+  @@index([parentId])
 }
+
 
 model NewsCategoryPost {
   newsId     String

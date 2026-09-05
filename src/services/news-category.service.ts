@@ -12,9 +12,16 @@ function createSlug(name: string) {
 export async function getAllNewsCategories() {
   return prisma.newsCategory.findMany({
     include: {
+      parent: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
       _count: {
         select: {
           posts: true,
+          children: true,
         },
       },
     },
@@ -24,13 +31,32 @@ export async function getAllNewsCategories() {
   });
 }
 
-export async function getNewsCategoryById(id: string) {
+export async function getNewsCategoryById(
+  id: string
+) {
   return prisma.newsCategory.findUnique({
     where: { id },
     include: {
+      parent: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      children: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+        },
+        orderBy: {
+          name: "asc",
+        },
+      },
       _count: {
         select: {
           posts: true,
+          children: true,
         },
       },
     },
@@ -39,7 +65,8 @@ export async function getNewsCategoryById(id: string) {
 
 export async function createNewsCategory(
   name: string,
-  description?: string
+  description?: string,
+  parentId?: string | null
 ) {
   const slug = createSlug(name);
 
@@ -48,11 +75,19 @@ export async function createNewsCategory(
       name: name.trim(),
       slug,
       description: description?.trim() || null,
+      parentId: parentId || null,
     },
     include: {
+      parent: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
       _count: {
         select: {
           posts: true,
+          children: true,
         },
       },
     },

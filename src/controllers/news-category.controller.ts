@@ -64,7 +64,7 @@ export async function createCategory(
   res: Response
 ) {
   try {
-    const { name, description } = req.body;
+    const { name, description, parentId } = req.body;
 
     if (
       !name ||
@@ -77,14 +77,26 @@ export async function createCategory(
       });
     }
 
-    const category =
-      await createNewsCategory(
-        name,
-        description
-      );
+    if (
+      parentId !== undefined &&
+      parentId !== null &&
+      typeof parentId !== "string"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid parent category.",
+      });
+    }
+
+    const category = await createNewsCategory(
+      name,
+      description,
+      parentId || null
+    );
 
     return res.status(201).json({
       success: true,
+      message: "Category created successfully.",
       data: category,
     });
   } catch (error: any) {
@@ -95,6 +107,13 @@ export async function createCategory(
         success: false,
         message:
           "A category with this name already exists.",
+      });
+    }
+
+    if (error?.code === "P2025") {
+      return res.status(400).json({
+        success: false,
+        message: "Parent category not found.",
       });
     }
 
