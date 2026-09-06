@@ -17,13 +17,29 @@ import adminNewsCategoryRoutes from "./admin-news-category.routes";
 import adminMediaRoutes from "./admin-media.routes";
 import adminDashboardRoutes from "./admin-dashboard.routes";
 import adminAccountRoutes from "./admin-account.routes";
+
 import authPasswordRoutes from "./auth-password.routes";
+
+import { requirePermission } from "../middlewares/require-permission";
+import { PERMISSIONS } from "../config/permissions";
+import adminManagementRoutes from "./admin-management.routes";
+import adminUserRoutes from "./admin-user.routes";
+import adminSettingsRoutes from "./admin-settings.routes";
+import adminAuditRoutes from "./admin-audit.routes";
 
 const router = Router();
 
+// ==============================
+// Authentication
+// ==============================
 
 router.use("/auth", authRoutes);
+
 router.use("/auth", authPasswordRoutes);
+
+// ==============================
+// Health
+// ==============================
 
 router.get("/health", (_req, res) => {
   res.status(200).json({
@@ -32,93 +48,150 @@ router.get("/health", (_req, res) => {
   });
 });
 
-router.use(
-  "/products",
-  productRoutes,
-);
+// ==============================
+// Public Products
+// ==============================
 
-router.use(
-  "/comparisons",
-  comparisonRoutes,
-);
+router.use("/products", productRoutes);
 
-router.use(
-  "/categories",
-  categoryRoutes,
-);
+// ==============================
+// Public Comparisons
+// ==============================
 
-router.use(
-  "/brands",
-  brandRoutes,
-);
+router.use("/comparisons", comparisonRoutes);
 
-router.use(
-  "/sellers",
-  sellerRoutes,
-);
+// ==============================
+// Public Categories
+// ==============================
 
-// Public news
-router.use(
-  "/news",
-  newsRoutes,
-);
+router.use("/categories", categoryRoutes);
 
-// Protected admin
+// ==============================
+// Public Brands
+// ==============================
+
+router.use("/brands", brandRoutes);
+
+// ==============================
+// Public Sellers
+// ==============================
+
+router.use("/sellers", sellerRoutes);
+
+// ==============================
+// Public News
+// ==============================
+
+router.use("/news", newsRoutes);
+
+// ==================================================
+// ADMIN PRODUCTS
+// ==================================================
+//
+// Authentication is handled here.
+// Individual product permissions are handled
+// inside admin-product.routes.ts.
+//
+// /admin/products
+// /admin/products/:id
+// /admin/products/upload-images
+//
+
 router.use(
   "/admin",
   requireAuth,
-  requireAdmin,
+  adminUserRoutes,
+);
+
+
+router.use(
+  "/admin",
+  requireAuth,
   adminProductRoutes,
 );
 
-// IMPORTANT:
-// More specific News category route must come
-// before the generic /admin News route.
+
+router.use(
+  "/admin",
+  requireAuth,
+  adminManagementRoutes,
+);
+
+// ==================================================
+// ADMIN NEWS CATEGORIES
+// ==================================================
+
 router.use(
   "/admin/news/categories",
   requireAuth,
-  requireAdmin,
   adminNewsCategoryRoutes,
 );
+
+// ==================================================
+// ADMIN MEDIA
+// ==================================================
 
 router.use(
   "/admin/media",
   requireAuth,
-  requireAdmin,
   adminMediaRoutes,
 );
 
-// Admin Dashboard
+// ==================================================
+// ADMIN DASHBOARD
+// ==================================================
+//
+// Requires:
+// dashboard.view
+//
+
 router.use(
   "/admin/dashboard",
   requireAuth,
-  requireAdmin,
+  requirePermission(PERMISSIONS.DASHBOARD_VIEW),
   adminDashboardRoutes,
 );
 
+// ==================================================
+// ADMIN ACCOUNT MANAGEMENT
+// ==================================================
+//
+// Will be converted to RBAC in Step 11.
+//
+// Currently protected by requireAdmin.
+//
+
 router.use(
   "/admin",
   requireAuth,
-  requireAdmin,
   adminAccountRoutes,
 );
 
-// Admin News
+// ==================================================
+// ADMIN NEWS
+// ==================================================
+//
+// Will be converted to RBAC after Step 11.
+//
+
 router.use(
   "/admin",
   requireAuth,
-  requireAdmin,
   adminNewsRoutes,
 );
 
+
 router.use(
-  "/auth",
-  authRoutes,
+  "/admin",
+  requireAuth,
+  adminSettingsRoutes,
 );
 
-
-
-
-router.use("/news", newsRoutes);
+// Admin Audit Logs
+router.use(
+  "/admin",
+  requireAuth,
+  adminAuditRoutes,
+);
 
 export default router;

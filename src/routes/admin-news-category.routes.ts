@@ -8,16 +8,44 @@ import {
   updateCategory,
 } from "../controllers/news-category.controller";
 
+import { requirePermission } from "../middlewares/require-permission";
+import { PERMISSIONS } from "../config/permissions";
+
 const router = Router();
 
-router.get("/", getNewsCategories);
+// View all news categories
+router.get(
+  "/",
+  requirePermission(PERMISSIONS.NEWS_VIEW),
+  getNewsCategories,
+);
 
-router.post("/", createCategory);
+// Create news category
+router.post(
+  "/",
+  requirePermission(PERMISSIONS.NEWS_CREATE),
+  createCategory,
+);
 
-router.get("/:id", getNewsCategory);
+// View single news category
+router.get(
+  "/:id",
+  requirePermission(PERMISSIONS.NEWS_VIEW),
+  getNewsCategory,
+);
 
-router.put("/:id", updateCategory);
+// Update news category
+router.put(
+  "/:id",
+  requirePermission(PERMISSIONS.NEWS_UPDATE),
+  updateCategory,
+);
 
-router.delete("/:id", deleteCategory);
+// Delete news category
+router.delete(
+  "/:id",
+  requirePermission(PERMISSIONS.NEWS_DELETE),
+  deleteCategory,
+);
 
 export default router;

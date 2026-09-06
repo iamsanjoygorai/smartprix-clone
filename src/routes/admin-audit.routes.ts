@@ -1,18 +1,18 @@
 import { Router } from "express";
 
 import {
-  changePassword,
-} from "../controllers/admin-account.controller";
+  getAuditLogs,
+} from "../controllers/admin-audit.controller";
 
 import { requirePermission } from "../middlewares/require-permission";
 import { PERMISSIONS } from "../config/permissions";
 
 const router = Router();
 
-router.put(
-  "/password",
-  requirePermission(PERMISSIONS.SETTINGS_UPDATE),
-  changePassword,
+router.get(
+  "/audit-logs",
+  requirePermission(PERMISSIONS.AUDIT_VIEW),
+  getAuditLogs,
 );
 
 export default router;

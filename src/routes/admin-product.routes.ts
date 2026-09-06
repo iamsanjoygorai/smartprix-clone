@@ -10,26 +10,58 @@ import { uploadProductImages } from "../controllers/admin-product-image.controll
 
 import { productImageUpload } from "../middlewares/upload.middleware";
 
+import { requirePermission } from "../middlewares/require-permission";
+import { PERMISSIONS } from "../config/permissions";
+
 const router = Router();
 
-router.get("/products", getAllAdminProducts);
+// View all products
+router.get(
+  "/products",
+  requirePermission(PERMISSIONS.PRODUCTS_VIEW),
+  getAllAdminProducts,
+);
 
+// Upload product images
 router.post(
   "/products/upload-images",
+  requirePermission(PERMISSIONS.PRODUCTS_CREATE),
   productImageUpload.array("images", 10),
   uploadProductImages,
 );
 
-router.post("/products", createProduct);
+// Create product
+router.post(
+  "/products",
+  requirePermission(PERMISSIONS.PRODUCTS_CREATE),
+  createProduct,
+);
 
-router.get("/products/:id", getAdminProduct);
+// View single product
+router.get(
+  "/products/:id",
+  requirePermission(PERMISSIONS.PRODUCTS_VIEW),
+  getAdminProduct,
+);
 
-router.put("/products/:id", updateProduct);
+// Update product
+router.put(
+  "/products/:id",
+  requirePermission(PERMISSIONS.PRODUCTS_UPDATE),
+  updateProduct,
+);
 
-router.delete("/products/:id", deleteProduct);
+// Delete product
+router.delete(
+  "/products/:id",
+  requirePermission(PERMISSIONS.PRODUCTS_DELETE),
+  deleteProduct,
+);
 
+// Restore product
 router.patch(
   "/products/:id/restore",
+  requirePermission(PERMISSIONS.PRODUCTS_UPDATE),
   restoreProduct,
 );
 

@@ -17,6 +17,10 @@ export const loginUser = async (input: LoginInput) => {
     throw new Error("Invalid email or password");
   }
 
+  if (user.isDisabled) {
+    throw new Error("Account is disabled");
+  }
+
   const passwordMatches = await bcrypt.compare(
     input.password,
     user.passwordHash,

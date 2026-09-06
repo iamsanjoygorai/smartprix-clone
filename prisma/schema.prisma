@@ -12,23 +12,99 @@ datasource db {
 // ─────────────────────────────────────────────
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String?
-  passwordHash String?
-  role         String   @default("ADMIN")
+  id                     String    @id @default(cuid())
+  email                  String    @unique
+  name                   String?
+  passwordHash           String?
+  role                   String    @default("USER")
+  isDisabled Boolean @default(false)
 
-  resetPasswordTokenHash String?
-  resetPasswordExpiresAt DateTime?
+  resetPasswordTokenHash  String?
+  resetPasswordExpiresAt  DateTime?
 
-  reviews      Review[]
-  comparisons  Comparison[]
-  favorites    Favorite[]
-  priceAlerts  PriceAlert[]
+  reviews                Review[]
+  comparisons            Comparison[]
+  favorites              Favorite[]
+  priceAlerts            PriceAlert[]
+
+  userRoles              UserRole[]
+  auditLogs              AuditLog[] @relation("AuditActor")
+
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+
+  roles       RolePermission[]
+
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model UserRole {
+  id        String   @id @default(cuid())
+
+  userId    String
+  roleId    String
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  @@unique([userId, roleId])
 }
+
+
+model RolePermission {
+  id           String     @id @default(cuid())
+
+  roleId       String
+  permissionId String
+
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime   @default(now())
+
+  @@unique([roleId, permissionId])
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+
+  actorUserId  String?
+  targetUserId String?
+
+  action       String
+  metadata     Json?
+
+  actor        User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  createdAt    DateTime @default(now())
+
+  @@index([actorUserId])
+  @@index([targetUserId])
+  @@index([action])
+  @@index([createdAt])
+}
+
 
 // ─────────────────────────────────────────────
 // CATEGORIES
@@ -437,4 +513,15 @@ model NewsCategoryPost {
 
   @@id([newsId, categoryId])
   @@index([categoryId])
+}
+
+
+model SiteSettings {
+  id               String   @id @default(cuid())
+  siteName         String   @default("Smartprix Clone")
+  siteDescription  String   @default("Smartprix Clone Website")
+  maintenanceMode  Boolean  @default(false)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }

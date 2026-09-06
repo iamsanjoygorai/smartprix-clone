@@ -1,4 +1,6 @@
 import { PrismaClient } from "@prisma/client";
+import { PERMISSIONS } from "../src/config/permissions";
+import { ROLES, ROLE_PERMISSIONS } from "../src/config/roles";
 
 const prisma = new PrismaClient();
 
@@ -851,6 +853,72 @@ for (const [name, slug] of specificationDefinitions) {
       },
     ],
   });
+
+
+    // ─────────────────────────────────────────────
+  // RBAC — ROLES & PERMISSIONS
+  // ─────────────────────────────────────────────
+
+  console.log("🔐 Seeding roles and permissions...");
+
+  // Create permissions
+  for (const permissionName of Object.values(PERMISSIONS)) {
+    await prisma.permission.upsert({
+      where: {
+        name: permissionName,
+      },
+      update: {},
+      create: {
+        name: permissionName,
+      },
+    });
+  }
+
+  // Create roles and assign permissions
+  for (const roleName of Object.values(ROLES)) {
+    const role = await prisma.role.upsert({
+      where: {
+        name: roleName,
+      },
+      update: {},
+      create: {
+        name: roleName,
+        description: `${roleName} role`,
+      },
+    });
+
+    const permissions = ROLE_PERMISSIONS[roleName];
+
+    for (const permissionName of permissions) {
+      const permission = await prisma.permission.findUnique({
+        where: {
+          name: permissionName,
+        },
+      });
+
+      if (!permission) {
+        continue;
+      }
+
+      await prisma.rolePermission.upsert({
+        where: {
+          roleId_permissionId: {
+            roleId: role.id,
+            permissionId: permission.id,
+          },
+        },
+        update: {},
+        create: {
+          roleId: role.id,
+          permissionId: permission.id,
+        },
+      });
+    }
+  }
+
+  console.log("✅ Roles and permissions seeded successfully!");
+
+
 
   console.log("✅ Database seed completed successfully!");
 }

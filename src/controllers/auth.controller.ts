@@ -29,26 +29,31 @@ export const login = async (
       data,
     });
   } catch (error) {
-    console.error("Login failed:", error);
+  console.error("Login failed:", error);
 
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Login failed";
+  const message =
+    error instanceof Error
+      ? error.message
+      : "Login failed";
 
-    if (message === "Invalid email or password") {
-      res.status(401).json({
-        success: false,
-        message,
-      });
-      return;
-    }
+  console.log("LOGIN ERROR MESSAGE:", message);
 
-    res.status(500).json({
+  if (
+    message === "Invalid email or password" ||
+    message === "Account is disabled"
+  ) {
+    res.status(401).json({
       success: false,
-      message: "Login failed",
+      message,
     });
+    return;
   }
+
+  res.status(500).json({
+    success: false,
+    message: "Login failed",
+  });
+}
 };
 
 export const register = async (
