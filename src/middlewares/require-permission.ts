@@ -67,10 +67,22 @@ export const requirePermission = (
        * allowed = false -> explicitly deny
        */
       const userOverride =
-        user.userPermissions.find(
-          (item) =>
-            item.permission.name === permission,
-        );
+  user.userPermissions.find(
+    (item) =>
+      item.permission.name === permission,
+  );
+
+console.log("PERMISSION CHECK:", {
+  userId,
+  permission,
+  role: user.role,
+  override: userOverride
+    ? {
+        permission: userOverride.permission.name,
+        allowed: userOverride.allowed,
+      }
+    : null,
+});
 
       if (userOverride) {
         if (!userOverride.allowed) {

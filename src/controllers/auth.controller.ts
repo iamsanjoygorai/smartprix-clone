@@ -130,12 +130,25 @@ export const getMe = async (
       where: {
         id: userId,
       },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        createdAt: true,
+      include: {
+        userRoles: {
+          include: {
+            role: {
+              include: {
+                permissions: {
+                  include: {
+                    permission: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        userPermissions: {
+          include: {
+            permission: true,
+          },
+        },
       },
     });
 
@@ -147,12 +160,69 @@ export const getMe = async (
       return;
     }
 
+    if (user.isDisabled) {
+      res.status(401).json({
+        success: false,
+        message: "Account is disabled",
+      });
+      return;
+    }
+
+    // Start with role permissions
+    const effectivePermissions = new Set<string>(
+      user.userRoles.flatMap((userRole) =>
+        userRole.role.permissions.map(
+          (rolePermission) =>
+            rolePermission.permission.name,
+        ),
+      ),
+    );
+
+    // SUPER_ADMIN gets every permission
+    if (user.role === "SUPER_ADMIN") {
+      const allPermissions =
+        await prisma.permission.findMany({
+          select: {
+            name: true,
+          },
+        });
+
+      for (const permission of allPermissions) {
+        effectivePermissions.add(permission.name);
+      }
+    } else {
+      // Apply individual user overrides
+      for (const override of user.userPermissions) {
+        if (override.allowed) {
+          effectivePermissions.add(
+            override.permission.name,
+          );
+        } else {
+          effectivePermissions.delete(
+            override.permission.name,
+          );
+        }
+      }
+    }
+
     res.status(200).json({
       success: true,
-      data: user,
+      data: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        createdAt: user.createdAt,
+        permissions: Array.from(
+          effectivePermissions,
+        ),
+      },
     });
   } catch (error) {
-    console.error("Failed to fetch current user:", error);
+    console.error(
+      "Failed to fetch current user:",
+      error,
+    );
 
     res.status(500).json({
       success: false,
