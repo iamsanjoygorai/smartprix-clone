@@ -15,8 +15,15 @@ import { requireAdmin } from "../middlewares/admin.middleware";
 
 import adminNewsCategoryRoutes from "./admin-news-category.routes";
 import adminMediaRoutes from "./admin-media.routes";
+import adminDashboardRoutes from "./admin-dashboard.routes";
+import adminAccountRoutes from "./admin-account.routes";
+import authPasswordRoutes from "./auth-password.routes";
 
 const router = Router();
+
+
+router.use("/auth", authRoutes);
+router.use("/auth", authPasswordRoutes);
 
 router.get("/health", (_req, res) => {
   res.status(200).json({
@@ -81,6 +88,21 @@ router.use(
   adminMediaRoutes,
 );
 
+// Admin Dashboard
+router.use(
+  "/admin/dashboard",
+  requireAuth,
+  requireAdmin,
+  adminDashboardRoutes,
+);
+
+router.use(
+  "/admin",
+  requireAuth,
+  requireAdmin,
+  adminAccountRoutes,
+);
+
 // Admin News
 router.use(
   "/admin",
@@ -93,6 +115,8 @@ router.use(
   "/auth",
   authRoutes,
 );
+
+
 
 
 router.use("/news", newsRoutes);

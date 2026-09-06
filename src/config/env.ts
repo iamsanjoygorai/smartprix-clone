@@ -1,4 +1,5 @@
 import "dotenv/config";
+
 import { z } from "zod";
 
 const envSchema = z.object({
@@ -26,6 +27,28 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z
     .string()
     .default("1d"),
+
+  SMTP_HOST: z
+    .string()
+    .default("smtp.gmail.com"),
+
+  SMTP_PORT: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(587),
+
+  SMTP_USER: z
+    .string()
+    .min(1, "SMTP_USER is required"),
+
+  SMTP_PASS: z
+    .string()
+    .min(1, "SMTP_PASS is required"),
+
+  MAIL_FROM: z
+    .string()
+    .min(1, "MAIL_FROM is required"),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
