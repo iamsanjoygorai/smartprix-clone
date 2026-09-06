@@ -1,10 +1,11 @@
+
 import bcrypt from "bcryptjs";
 
 import prisma from "../db/prisma";
-import { generateToken } from "../config/jwt";
-import type { LoginInput } from "../validators/auth.validator";
 
-import type { RegisterInput } from "../validators/register.validator";
+import { generateToken } from "../config/jwt";
+
+import type { LoginInput } from "../validators/auth.validator";
 
 export const loginUser = async (input: LoginInput) => {
   const user = await prisma.user.findUnique({
@@ -30,43 +31,33 @@ export const loginUser = async (input: LoginInput) => {
     throw new Error("Invalid email or password");
   }
 
-  const token = generateToken({
-    userId: user.id,
-    role: user.role,
-  });
-
-  return {
-    token,
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-    },
-  };
-};
-
-export const registerUser = async (input: RegisterInput) => {
-  const existingUser = await prisma.user.findUnique({
+  const userRoles = await prisma.userRole.findMany({
     where: {
-      email: input.email,
+      userId: user.id,
+    },
+    include: {
+      role: {
+        include: {
+          permissions: {
+            include: {
+              permission: true,
+            },
+          },
+        },
+      },
     },
   });
 
-  if (existingUser) {
-    throw new Error("Email already registered");
-  }
-
-  const passwordHash = await bcrypt.hash(input.password, 12);
-
-  const user = await prisma.user.create({
-    data: {
-      name: input.name,
-      email: input.email,
-      passwordHash,
-      role: "USER",
-    },
-  });
+  const permissions = Array.from(
+    new Set(
+      userRoles.flatMap((userRole) =>
+        userRole.role.permissions.map(
+          (rolePermission) =>
+            rolePermission.permission.name,
+        ),
+      ),
+    ),
+  );
 
   const token = generateToken({
     userId: user.id,
@@ -80,6 +71,7 @@ export const registerUser = async (input: RegisterInput) => {
       email: user.email,
       name: user.name,
       role: user.role,
+      permissions,
     },
   };
 };
