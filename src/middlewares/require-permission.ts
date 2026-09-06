@@ -1,13 +1,9 @@
-import type {
-  NextFunction,
-  Request,
-  Response,
-} from "express";
-
+import { Request, Response, NextFunction } from "express";
 import prisma from "../db/prisma";
+import type { Permission } from "../config/permissions";
 
 export const requirePermission = (
-  permissionName: string,
+  permission: Permission,
 ) => {
   return async (
     req: Request,
@@ -15,48 +11,99 @@ export const requirePermission = (
     next: NextFunction,
   ) => {
     try {
-      if (!req.user) {
+      const userId = req.user?.userId;
+
+      if (!userId) {
         return res.status(401).json({
           success: false,
           message: "Authentication required",
         });
       }
 
-      const userRoles =
-        await prisma.userRole.findMany({
-          where: {
-            userId: req.user.userId,
+      const user = await prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
+        include: {
+          userPermissions: {
+            include: {
+              permission: true,
+            },
           },
-          include: {
-            role: {
-              include: {
-                permissions: {
-                  include: {
-                    permission: true,
+          userRoles: {
+            include: {
+              role: {
+                include: {
+                  permissions: {
+                    include: {
+                      permission: true,
+                    },
                   },
                 },
               },
             },
           },
-        });
+        },
+      });
 
-      const hasPermission =
-        userRoles.some((userRole) =>
-          userRole.role.permissions.some(
-            (rolePermission) =>
-              rolePermission.permission.name ===
-              permissionName,
-          ),
-        );
-
-      if (!hasPermission) {
-        return res.status(403).json({
+      if (!user) {
+        return res.status(401).json({
           success: false,
-          message: "Insufficient permissions",
+          message: "User not found",
         });
       }
 
-      next();
+      /*
+       * SUPER_ADMIN always has full access.
+       */
+      if (user.role === "SUPER_ADMIN") {
+        return next();
+      }
+
+      /*
+       * Check for an individual user override first.
+       *
+       * allowed = true  -> explicitly allow
+       * allowed = false -> explicitly deny
+       */
+      const userOverride =
+        user.userPermissions.find(
+          (item) =>
+            item.permission.name === permission,
+        );
+
+      if (userOverride) {
+        if (!userOverride.allowed) {
+          return res.status(403).json({
+            success: false,
+            message: "Permission denied",
+          });
+        }
+
+        return next();
+      }
+
+      /*
+       * No individual override.
+       * Fall back to role permissions.
+       */
+      const hasRolePermission =
+        user.userRoles.some((userRole) =>
+          userRole.role.permissions.some(
+            (rolePermission) =>
+              rolePermission.permission.name ===
+              permission,
+          ),
+        );
+
+      if (!hasRolePermission) {
+        return res.status(403).json({
+          success: false,
+          message: "Permission denied",
+        });
+      }
+
+      return next();
     } catch (error) {
       console.error(
         "Permission middleware error:",
@@ -65,7 +112,7 @@ export const requirePermission = (
 
       return res.status(500).json({
         success: false,
-        message: "Unable to verify permissions",
+        message: "Permission check failed",
       });
     }
   };

@@ -12,99 +12,100 @@ datasource db {
 // ─────────────────────────────────────────────
 
 model User {
-  id                     String    @id @default(cuid())
-  email                  String    @unique
-  name                   String?
-  passwordHash           String?
-  role                   String    @default("USER")
-  isDisabled Boolean @default(false)
+  id           String  @id @default(cuid())
+  email        String  @unique
+  name         String?
+  passwordHash String?
+  role         String  @default("USER")
+  isDisabled   Boolean @default(false)
 
-  resetPasswordTokenHash  String?
-  resetPasswordExpiresAt  DateTime?
+  resetPasswordTokenHash String?
+  resetPasswordExpiresAt DateTime?
 
-  reviews                Review[]
-  comparisons            Comparison[]
-  favorites              Favorite[]
-  priceAlerts            PriceAlert[]
+  reviews     Review[]
+  comparisons Comparison[]
+  favorites   Favorite[]
+  priceAlerts PriceAlert[]
 
-  userRoles              UserRole[]
-  auditLogs              AuditLog[] @relation("AuditActor")
+  userRoles UserRole[]
+  auditLogs AuditLog[] @relation("AuditActor")
 
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  userPermissions UserPermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Role {
-  id          String           @id @default(cuid())
-  name        String           @unique
+  id          String  @id @default(cuid())
+  name        String  @unique
   description String?
 
   users       UserRole[]
   permissions RolePermission[]
 
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Permission {
-  id          String           @id @default(cuid())
-  name        String           @unique
+  id          String  @id @default(cuid())
+  name        String  @unique
   description String?
 
-  roles       RolePermission[]
+  roles RolePermission[]
 
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  userPermissions UserPermission[]
 }
 
 model UserRole {
-  id        String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  userId    String
-  roleId    String
+  userId String
+  roleId String
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
   @@unique([userId, roleId])
 }
 
-
 model RolePermission {
-  id           String     @id @default(cuid())
+  id String @id @default(cuid())
 
   roleId       String
   permissionId String
 
-  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
-  createdAt    DateTime   @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([roleId, permissionId])
 }
 
 model AuditLog {
-  id           String   @id @default(cuid())
+  id String @id @default(cuid())
 
   actorUserId  String?
   targetUserId String?
 
-  action       String
-  metadata     Json?
+  action   String
+  metadata Json?
 
-  actor        User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
-  createdAt    DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([actorUserId])
   @@index([targetUserId])
   @@index([action])
   @@index([createdAt])
 }
-
 
 // ─────────────────────────────────────────────
 // CATEGORIES
@@ -503,7 +504,6 @@ model NewsCategory {
   @@index([parentId])
 }
 
-
 model NewsCategoryPost {
   newsId     String
   categoryId String
@@ -515,13 +515,29 @@ model NewsCategoryPost {
   @@index([categoryId])
 }
 
-
 model SiteSettings {
-  id               String   @id @default(cuid())
-  siteName         String   @default("Smartprix Clone")
-  siteDescription  String   @default("Smartprix Clone Website")
-  maintenanceMode  Boolean  @default(false)
+  id              String  @id @default(cuid())
+  siteName        String  @default("Smartprix Clone")
+  siteDescription String  @default("Smartprix Clone Website")
+  maintenanceMode Boolean @default(false)
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UserPermission {
+  id           String  @id @default(cuid())
+  userId       String
+  permissionId String
+  allowed      Boolean @default(true)
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, permissionId])
+  @@index([userId])
+  @@index([permissionId])
 }

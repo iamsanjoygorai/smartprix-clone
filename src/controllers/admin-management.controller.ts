@@ -590,3 +590,87 @@ export const deleteAdmin = async (
     });
   }
 };
+
+
+export const updateAdminStatus = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const { id } = req.params;
+    const { isDisabled } = req.body;
+
+    if (typeof isDisabled !== "boolean") {
+      return res.status(400).json({
+        success: false,
+        message: "isDisabled must be a boolean",
+      });
+    }
+
+    if (req.user?.userId === id) {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot block your own account",
+      });
+    }
+
+    const admin = await prisma.user.findUnique({
+      where: {
+        id,
+      },
+    });
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found",
+      });
+    }
+
+    const updatedAdmin = await prisma.user.update({
+      where: {
+        id,
+      },
+      data: {
+        isDisabled,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isDisabled: true,
+      },
+    });
+
+    await createAuditLog({
+      actorUserId: req.user.userId,
+      targetUserId: id,
+      action: isDisabled
+        ? "ADMIN_BLOCKED"
+        : "ADMIN_ACTIVATED",
+      metadata: {
+        email: admin.email,
+        role: admin.role,
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: isDisabled
+        ? "Admin blocked successfully"
+        : "Admin activated successfully",
+      admin: updatedAdmin,
+    });
+  } catch (error) {
+    console.error(
+      "Update admin status error:",
+      error,
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update admin status",
+    });
+  }
+};
