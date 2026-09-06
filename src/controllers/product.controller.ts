@@ -13,11 +13,11 @@ export const getAllProducts = async (
   res: Response,
 ) => {
   try {
-    const products = await getProducts(req.query);
+    const result = await getProducts(req.query);
 
     res.status(200).json({
       success: true,
-      data: products,
+      data: result,
     });
   } catch (error) {
     console.error("Failed to fetch products:", error);
