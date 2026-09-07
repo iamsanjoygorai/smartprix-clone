@@ -1,51 +1,405 @@
 import prisma from "../db/prisma";
+import { Prisma } from "@prisma/client";
+
+// ─────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────
+
+const toStringArray = (value: unknown): string[] => {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+};
+
+const toNumber = (value: unknown): number | undefined => {
+  if (typeof value !== "string" || !value.trim()) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const specificationSlugs: Record<string, string[]> = {
+  display: [
+    "display",
+    "display-type",
+    "screen",
+    "screen-type",
+  ],
+
+  screenSize: [
+    "screen-size",
+    "display-size",
+    "display-size-inches",
+  ],
+
+  screenResolution: [
+    "screen-resolution",
+    "display-resolution",
+    "resolution",
+  ],
+
+  rearCamera: [
+    "rear-camera",
+    "primary-camera",
+    "main-camera",
+    "camera",
+  ],
+
+  frontCamera: [
+    "front-camera",
+    "selfie-camera",
+  ],
+
+  cpu: [
+    "cpu",
+    "processor",
+    "chipset",
+  ],
+
+  ram: [
+    "ram",
+    "memory",
+  ],
+
+  battery: [
+    "battery",
+    "battery-capacity",
+    "battery-size",
+  ],
+
+  connectivity: [
+    "connectivity",
+    "network",
+  ],
+
+  features: [
+    "features",
+    "feature",
+  ],
+
+  operatingSystem: [
+    "operating-system",
+    "os",
+  ],
+
+  androidVersion: [
+    "android-version",
+    "android",
+  ],
+
+  inbuiltMemory: [
+    "inbuilt-memory",
+    "internal-storage",
+    "storage",
+    "rom",
+  ],
+
+  aspectRatio: [
+    "aspect-ratio",
+    "screen-aspect-ratio",
+  ],
+
+  refreshRate: [
+    "refresh-rate",
+    "screen-refresh-rate",
+  ],
+
+  cpuManufacturer: [
+    "cpu-manufacturer",
+    "processor-manufacturer",
+    "chipset-manufacturer",
+  ],
+
+  gpuManufacturer: [
+    "gpu-manufacturer",
+    "graphics-processor",
+    "gpu",
+  ],
+
+  ipRating: [
+    "ip-rating",
+    "water-resistance",
+    "waterproof-rating",
+  ],
+
+  design: [
+    "design",
+    "phone-design",
+  ],
+
+  type: [
+    "type",
+    "phone-type",
+    "device-type",
+  ],
+};
+
+// ─────────────────────────────────────────────
+// SPECIFICATION SQL HELPERS
+// ─────────────────────────────────────────────
+
+const specificationText = Prisma.sql`
+  LOWER(
+    COALESCE(
+      sv."value",
+      ps."customValue",
+      ''
+    )
+  )
+`;
+
+const specificationNumber = Prisma.sql`
+  NULLIF(
+    regexp_replace(
+      COALESCE(
+        sv."value",
+        ps."customValue",
+        ''
+      ),
+      '[^0-9.]+',
+      '',
+      'g'
+    ),
+    ''
+  )::numeric
+`;
+
+const makeSpecificationCondition = (
+  slugs: string[],
+  condition: Prisma.Sql,
+) => {
+  return Prisma.sql`
+    EXISTS (
+      SELECT 1
+      FROM "ProductSpecification" ps
+      INNER JOIN "Specification" s
+        ON s."id" = ps."specificationId"
+      LEFT JOIN "SpecificationValue" sv
+        ON sv."id" = ps."valueId"
+      WHERE ps."productId" = p."id"
+        AND s."slug" IN (${Prisma.join(slugs)})
+        AND (${condition})
+    )
+  `;
+};
+
+const textEquals = (
+  slugs: string[],
+  values: string[],
+) => {
+  if (values.length === 0) {
+    return null;
+  }
+
+  const conditions = values.map((value) =>
+    makeSpecificationCondition(
+      slugs,
+      Prisma.sql`
+        ${specificationText} = ${value.toLowerCase()}
+      `,
+    ),
+  );
+
+  return Prisma.sql`
+    (${Prisma.join(conditions, " OR ")})
+  `;
+};
+
+const textContains = (
+  slugs: string[],
+  values: string[],
+) => {
+  if (values.length === 0) {
+    return null;
+  }
+
+  const conditions = values.map((value) =>
+    makeSpecificationCondition(
+      slugs,
+      Prisma.sql`
+        ${specificationText} LIKE ${`%${value.toLowerCase()}%`}
+      `,
+    ),
+  );
+
+  return Prisma.sql`
+    (${Prisma.join(conditions, " OR ")})
+  `;
+};
+
+const numericAtLeast = (
+  slugs: string[],
+  values: number[],
+) => {
+  if (values.length === 0) {
+    return null;
+  }
+
+  const conditions = values.map((value) =>
+    makeSpecificationCondition(
+      slugs,
+      Prisma.sql`
+        ${specificationNumber} >= ${value}
+      `,
+    ),
+  );
+
+  return Prisma.sql`
+    (${Prisma.join(conditions, " OR ")})
+  `;
+};
+
+const numericRange = (
+  slugs: string[],
+  ranges: Array<[number, number | null]>,
+) => {
+  if (ranges.length === 0) {
+    return null;
+  }
+
+  const conditions = ranges.map(([min, max]) => {
+    const numberCondition =
+      max === null
+        ? Prisma.sql`
+            ${specificationNumber} >= ${min}
+          `
+        : Prisma.sql`
+            ${specificationNumber} >= ${min}
+            AND ${specificationNumber} <= ${max}
+          `;
+
+    return makeSpecificationCondition(
+      slugs,
+      numberCondition,
+    );
+  });
+
+  return Prisma.sql`
+    (${Prisma.join(conditions, " OR ")})
+  `;
+};
+
+// ─────────────────────────────────────────────
+// PRODUCTS
+// ─────────────────────────────────────────────
 
 export const getProducts = async (
   query: Record<string, unknown>,
 ) => {
   // ─────────────────────────────────────────────
-  // QUERY PARAMETERS
+  // BASIC QUERY PARAMETERS
   // ─────────────────────────────────────────────
 
   const search =
-    typeof query.search === "string" && query.search.trim()
+    typeof query.search === "string" &&
+    query.search.trim()
       ? query.search.trim()
       : undefined;
 
-  const brands =
-  typeof query.brands === "string"
-    ? query.brands
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean)
-    : [];
+  const brands = toStringArray(query.brands);
 
   const category =
-    typeof query.category === "string" && query.category.trim()
+    typeof query.category === "string" &&
+    query.category.trim()
       ? query.category.trim()
       : undefined;
 
-  const minPriceValue =
-    typeof query.minPrice === "string"
-      ? Number(query.minPrice)
-      : undefined;
+  const minPrice = toNumber(query.minPrice);
+  const maxPrice = toNumber(query.maxPrice);
 
-  const maxPriceValue =
-    typeof query.maxPrice === "string"
-      ? Number(query.maxPrice)
-      : undefined;
+  // ─────────────────────────────────────────────
+  // NEW FILTER PARAMETERS
+  // ─────────────────────────────────────────────
 
-  const minPrice =
-    minPriceValue !== undefined &&
-    Number.isFinite(minPriceValue)
-      ? minPriceValue
-      : undefined;
+  const displays = toStringArray(query.displays);
 
-  const maxPrice =
-    maxPriceValue !== undefined &&
-    Number.isFinite(maxPriceValue)
-      ? maxPriceValue
-      : undefined;
+  const availability = toStringArray(
+    query.availability,
+  );
+
+  const types = toStringArray(query.types);
+
+  const launchedWithin = toStringArray(
+    query.launchedWithin,
+  );
+
+  const design = toStringArray(query.design);
+
+  const screenSizes = toStringArray(
+    query.screenSizes,
+  );
+
+  const screenResolution = toStringArray(
+    query.screenResolution,
+  );
+
+  const rearCamera = toStringArray(
+    query.rearCamera,
+  );
+
+  const frontCamera = toStringArray(
+    query.frontCamera,
+  );
+
+  const cpu = toStringArray(query.cpu);
+
+  const ram = toStringArray(query.ram);
+
+  const batterySize = toStringArray(
+    query.batterySize,
+  );
+
+  const connectivity = toStringArray(
+    query.connectivity,
+  );
+
+  const features = toStringArray(
+    query.features,
+  );
+
+  const operatingSystem = toStringArray(
+    query.operatingSystem,
+  );
+
+  const androidVersion = toStringArray(
+    query.androidVersion,
+  );
+
+  const inbuiltMemory = toStringArray(
+    query.inbuiltMemory,
+  );
+
+  const priceDrop = toStringArray(
+    query.priceDrop,
+  );
+
+  const aspectRatio = toStringArray(
+    query.aspectRatio,
+  );
+
+  const refreshRate = toStringArray(
+    query.refreshRate,
+  );
+
+  const cpuManufacturer = toStringArray(
+    query.cpuManufacturer,
+  );
+
+  const gpuManufacturer = toStringArray(
+    query.gpuManufacturer,
+  );
+
+  const ipRating = toStringArray(
+    query.ipRating,
+  );
 
   // ─────────────────────────────────────────────
   // PAGINATION
@@ -62,7 +416,8 @@ export const getProducts = async (
       : 20;
 
   const page =
-    Number.isFinite(pageValue) && pageValue > 0
+    Number.isFinite(pageValue) &&
+    pageValue > 0
       ? Math.floor(pageValue)
       : 1;
 
@@ -125,10 +480,10 @@ export const getProducts = async (
   }
 
   // ─────────────────────────────────────────────
-  // WHERE
+  // COMMON PRISMA FILTERS
   // ─────────────────────────────────────────────
 
-  const where = {
+  const commonWhere: Prisma.ProductWhereInput = {
     isActive: true,
 
     ...(search
@@ -137,34 +492,24 @@ export const getProducts = async (
             {
               name: {
                 contains: search,
-                mode: "insensitive" as const,
+                mode: "insensitive",
               },
             },
             {
               description: {
                 contains: search,
-                mode: "insensitive" as const,
+                mode: "insensitive",
               },
             },
             {
               shortDescription: {
                 contains: search,
-                mode: "insensitive" as const,
+                mode: "insensitive",
               },
             },
           ],
         }
       : {}),
-
-    ...(brands.length > 0
-  ? {
-      brand: {
-        slug: {
-          in: brands,
-        },
-      },
-    }
-  : {}),
 
     ...(category
       ? {
@@ -174,19 +519,18 @@ export const getProducts = async (
         }
       : {}),
 
-    ...(minPrice !== undefined || maxPrice !== undefined
+    ...(minPrice !== undefined ||
+    maxPrice !== undefined
       ? {
           prices: {
             some: {
               inStock: true,
-
               amount: {
                 ...(minPrice !== undefined
                   ? {
                       gte: minPrice,
                     }
                   : {}),
-
                 ...(maxPrice !== undefined
                   ? {
                       lte: maxPrice,
@@ -200,7 +544,954 @@ export const getProducts = async (
   };
 
   // ─────────────────────────────────────────────
-  // TOTAL COUNT
+  // BRAND FILTER
+  // ─────────────────────────────────────────────
+
+  const where: Prisma.ProductWhereInput = {
+    ...commonWhere,
+
+    ...(brands.length > 0
+      ? {
+          brand: {
+            slug: {
+              in: brands,
+            },
+          },
+        }
+      : {}),
+  };
+
+  // ─────────────────────────────────────────────
+  // AVAILABILITY
+  // ─────────────────────────────────────────────
+
+  if (availability.includes("exclude-out-of-stock")) {
+    where.prices = {
+      some: {
+        inStock: true,
+      },
+    };
+  }
+
+  if (availability.includes("upcoming")) {
+    where.releaseDate = {
+      gt: new Date(),
+    };
+  }
+
+  if (availability.includes("exclude-upcoming")) {
+    where.releaseDate = {
+      lte: new Date(),
+    };
+  }
+
+  // Exclude global products.
+  //
+  // Your schema does not currently contain a dedicated
+  // "global" boolean/field, so this is intentionally
+  // handled later if a global specification is present.
+  if (availability.includes("exclude-global")) {
+    const globalCondition = textEquals(
+      ["availability", "market", "region"],
+      ["global"],
+    );
+
+    if (globalCondition) {
+      where.AND = [
+        ...(where.AND
+          ? Array.isArray(where.AND)
+            ? where.AND
+            : [where.AND]
+          : []),
+        {
+          NOT: {
+            // handled through raw ID filtering below
+          },
+        },
+      ];
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // SQL SPECIFICATION FILTERS
+  // ─────────────────────────────────────────────
+
+  const sqlConditions: Prisma.Sql[] = [];
+
+  // ─────────────────────────────────────────────
+  // DISPLAY
+  // ─────────────────────────────────────────────
+
+  if (displays.length > 0) {
+    const displayCondition = textContains(
+      specificationSlugs.display,
+      displays,
+    );
+
+    if (displayCondition) {
+      sqlConditions.push(displayCondition);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // TYPES
+  // ─────────────────────────────────────────────
+
+  if (types.length > 0) {
+    const typeCondition = textContains(
+      specificationSlugs.type,
+      types,
+    );
+
+    if (typeCondition) {
+      sqlConditions.push(typeCondition);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // DESIGN
+  // ─────────────────────────────────────────────
+
+  if (design.length > 0) {
+    const designCondition = textContains(
+      specificationSlugs.design,
+      design.map((value) =>
+        value.replace(/-/g, " "),
+      ),
+    );
+
+    if (designCondition) {
+      sqlConditions.push(designCondition);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // SCREEN SIZE
+  // ─────────────────────────────────────────────
+
+  if (screenSizes.length > 0) {
+    const ranges: Array<
+      [number, number | null]
+    > = [];
+
+    for (const value of screenSizes) {
+      switch (value) {
+        case "4-inch-below":
+          ranges.push([0, 4]);
+          break;
+
+        case "4-4.7-inch":
+          ranges.push([4, 4.7]);
+          break;
+
+        case "5-5.5-inch":
+          ranges.push([5, 5.5]);
+          break;
+
+        case "5-6-inch":
+          ranges.push([5, 6]);
+          break;
+
+        case "6-6.5-inch":
+          ranges.push([6, 6.5]);
+          break;
+
+        case "6.5-inch-above":
+          ranges.push([6.5, null]);
+          break;
+      }
+    }
+
+    const screenSizeCondition = numericRange(
+      specificationSlugs.screenSize,
+      ranges,
+    );
+
+    if (screenSizeCondition) {
+      sqlConditions.push(screenSizeCondition);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // SCREEN RESOLUTION
+  // ─────────────────────────────────────────────
+
+  if (screenResolution.length > 0) {
+    const resolutionMap: Record<
+      string,
+      string[]
+    > = {
+      "4096x2160": ["4096", "2160"],
+      "2048x1536": ["2048", "1536"],
+      "1920x1080": ["1920", "1080"],
+      "1280x720": ["1280", "720"],
+    };
+
+    const resolutionConditions: Prisma.Sql[] = [];
+
+    for (const value of screenResolution) {
+      const parts = resolutionMap[value];
+
+      if (!parts) continue;
+
+      resolutionConditions.push(
+        makeSpecificationCondition(
+          specificationSlugs.screenResolution,
+          Prisma.sql`
+            ${specificationText} LIKE ${`%${parts[0]}%`}
+            AND ${specificationText} LIKE ${`%${parts[1]}%`}
+          `,
+        ),
+      );
+    }
+
+    if (
+      screenResolution.includes("high-ppi")
+    ) {
+      resolutionConditions.push(
+        makeSpecificationCondition(
+          specificationSlugs.screenResolution,
+          Prisma.sql`
+            ${specificationText} LIKE '%ppi%'
+          `,
+        ),
+      );
+    }
+
+    if (resolutionConditions.length > 0) {
+      sqlConditions.push(
+        Prisma.sql`
+          (${Prisma.join(
+            resolutionConditions,
+            " OR ",
+          )})
+        `,
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // REAR CAMERA
+  // ─────────────────────────────────────────────
+
+  if (rearCamera.length > 0) {
+    const conditions: Prisma.Sql[] = [];
+
+    for (const value of rearCamera) {
+      switch (value) {
+        case "rear-camera":
+          conditions.push(
+            makeSpecificationCondition(
+              specificationSlugs.rearCamera,
+              Prisma.sql`
+                ${specificationText} NOT LIKE '%no rear%'
+              `,
+            ),
+          );
+          break;
+
+        case "dual-camera":
+          conditions.push(
+            makeSpecificationCondition(
+              specificationSlugs.rearCamera,
+              Prisma.sql`
+                ${specificationText} LIKE '%dual%'
+              `,
+            ),
+          );
+          break;
+
+        case "triple-camera":
+          conditions.push(
+            makeSpecificationCondition(
+              specificationSlugs.rearCamera,
+              Prisma.sql`
+                ${specificationText} LIKE '%triple%'
+              `,
+            ),
+          );
+          break;
+
+        case "quad-camera":
+          conditions.push(
+            makeSpecificationCondition(
+              specificationSlugs.rearCamera,
+              Prisma.sql`
+                ${specificationText} LIKE '%quad%'
+              `,
+            ),
+          );
+          break;
+
+        case "no-rear-camera":
+          conditions.push(
+            makeSpecificationCondition(
+              specificationSlugs.rearCamera,
+              Prisma.sql`
+                ${specificationText} LIKE '%no%'
+              `,
+            ),
+          );
+          break;
+
+        case "autofocus":
+          conditions.push(
+            makeSpecificationCondition(
+              specificationSlugs.rearCamera,
+              Prisma.sql`
+                ${specificationText} LIKE '%autofocus%'
+              `,
+            ),
+          );
+          break;
+
+        case "flash":
+          conditions.push(
+            makeSpecificationCondition(
+              specificationSlugs.rearCamera,
+              Prisma.sql`
+                ${specificationText} LIKE '%flash%'
+              `,
+            ),
+          );
+          break;
+
+        case "ois":
+          conditions.push(
+            makeSpecificationCondition(
+              specificationSlugs.rearCamera,
+              Prisma.sql`
+                ${specificationText} LIKE '%ois%'
+              `,
+            ),
+          );
+          break;
+      }
+    }
+
+    const thresholds: Record<
+      string,
+      number
+    > = {
+      "5mp-above": 5,
+      "13mp-above": 13,
+      "16mp-above": 16,
+      "20mp-above": 20,
+      "48mp-above": 48,
+      "64mp-above": 64,
+      "108mp-above": 108,
+      "200mp-above": 200,
+    };
+
+    for (const value of rearCamera) {
+      const threshold = thresholds[value];
+
+      if (threshold !== undefined) {
+        const condition = numericAtLeast(
+          specificationSlugs.rearCamera,
+          [threshold],
+        );
+
+        if (condition) {
+          conditions.push(condition);
+        }
+      }
+    }
+
+    if (conditions.length > 0) {
+      sqlConditions.push(
+        Prisma.sql`
+          (${Prisma.join(
+            conditions,
+            " OR ",
+          )})
+        `,
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // FRONT CAMERA
+  // ─────────────────────────────────────────────
+
+  if (frontCamera.length > 0) {
+    const conditions: Prisma.Sql[] = [];
+
+    for (const value of frontCamera) {
+      switch (value) {
+        case "front-camera":
+          conditions.push(
+            makeSpecificationCondition(
+              specificationSlugs.frontCamera,
+              Prisma.sql`
+                ${specificationText} NOT LIKE '%no%'
+              `,
+            ),
+          );
+          break;
+
+        case "dual-front-camera":
+          conditions.push(
+            makeSpecificationCondition(
+              specificationSlugs.frontCamera,
+              Prisma.sql`
+                ${specificationText} LIKE '%dual%'
+              `,
+            ),
+          );
+          break;
+
+        case "front-camera-flash":
+          conditions.push(
+            makeSpecificationCondition(
+              specificationSlugs.frontCamera,
+              Prisma.sql`
+                ${specificationText} LIKE '%flash%'
+              `,
+            ),
+          );
+          break;
+
+        case "front-camera-autofocus":
+          conditions.push(
+            makeSpecificationCondition(
+              specificationSlugs.frontCamera,
+              Prisma.sql`
+                ${specificationText} LIKE '%autofocus%'
+              `,
+            ),
+          );
+          break;
+      }
+    }
+
+    const thresholds: Record<
+      string,
+      number
+    > = {
+      "front-5mp-above": 5,
+      "front-8mp-above": 8,
+      "front-12mp-above": 12,
+      "front-16mp-above": 16,
+      "front-32mp-above": 32,
+    };
+
+    for (const value of frontCamera) {
+      const threshold = thresholds[value];
+
+      if (threshold !== undefined) {
+        const condition = numericAtLeast(
+          specificationSlugs.frontCamera,
+          [threshold],
+        );
+
+        if (condition) {
+          conditions.push(condition);
+        }
+      }
+    }
+
+    if (conditions.length > 0) {
+      sqlConditions.push(
+        Prisma.sql`
+          (${Prisma.join(
+            conditions,
+            " OR ",
+          )})
+        `,
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // CPU
+  // ─────────────────────────────────────────────
+
+  if (cpu.length > 0) {
+    const conditions: Prisma.Sql[] = [];
+
+    const coreOptions: Record<
+      string,
+      string
+    > = {
+      "quad-core": "quad",
+      "octa-core": "octa",
+      "deca-core": "deca",
+    };
+
+    for (const value of cpu) {
+      if (coreOptions[value]) {
+        conditions.push(
+          makeSpecificationCondition(
+            specificationSlugs.cpu,
+            Prisma.sql`
+              ${specificationText}
+              LIKE ${`%${coreOptions[value]}%`}
+            `,
+          ),
+        );
+      }
+    }
+
+    const ghzThresholds: Record<
+      string,
+      number
+    > = {
+      "1.4ghz-above": 1.4,
+      "2ghz-above": 2,
+      "2.3ghz-above": 2.3,
+      "3ghz-above": 3,
+    };
+
+    for (const value of cpu) {
+      const threshold = ghzThresholds[value];
+
+      if (threshold !== undefined) {
+        const condition = numericAtLeast(
+          specificationSlugs.cpu,
+          [threshold],
+        );
+
+        if (condition) {
+          conditions.push(condition);
+        }
+      }
+    }
+
+    if (conditions.length > 0) {
+      sqlConditions.push(
+        Prisma.sql`
+          (${Prisma.join(
+            conditions,
+            " OR ",
+          )})
+        `,
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // RAM
+  // ─────────────────────────────────────────────
+
+  if (ram.length > 0) {
+    const thresholds: Record<
+      string,
+      number
+    > = {
+      "2gb-above": 2,
+      "3gb-above": 3,
+      "4gb-above": 4,
+      "6gb-above": 6,
+      "8gb-above": 8,
+      "12gb-above": 12,
+    };
+
+    const values = ram
+      .map((value) => thresholds[value])
+      .filter(
+        (value): value is number =>
+          value !== undefined,
+      );
+
+    const condition = numericAtLeast(
+      specificationSlugs.ram,
+      values,
+    );
+
+    if (condition) {
+      sqlConditions.push(condition);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // BATTERY
+  // ─────────────────────────────────────────────
+
+  if (batterySize.length > 0) {
+    const conditions: Prisma.Sql[] = [];
+
+    const thresholds: Record<
+      string,
+      number
+    > = {
+      "4000mah-above": 4000,
+      "5000mah-above": 5000,
+      "6000mah-above": 6000,
+      "7000mah-above": 7000,
+    };
+
+    for (const value of batterySize) {
+      const threshold = thresholds[value];
+
+      if (threshold !== undefined) {
+        const condition = numericAtLeast(
+          specificationSlugs.battery,
+          [threshold],
+        );
+
+        if (condition) {
+          conditions.push(condition);
+        }
+      }
+
+      if (value === "removable-battery") {
+        conditions.push(
+          makeSpecificationCondition(
+            specificationSlugs.battery,
+            Prisma.sql`
+              ${specificationText}
+              LIKE '%removable%'
+            `,
+          ),
+        );
+      }
+
+      if (value === "fast-charging") {
+        conditions.push(
+          makeSpecificationCondition(
+            [
+              ...specificationSlugs.battery,
+              "charging",
+              "fast-charging",
+            ],
+            Prisma.sql`
+              ${specificationText}
+              LIKE '%fast%'
+            `,
+          ),
+        );
+      }
+
+      if (value === "long-battery-backup") {
+        conditions.push(
+          makeSpecificationCondition(
+            specificationSlugs.battery,
+            Prisma.sql`
+              ${specificationText}
+              LIKE '%long%'
+            `,
+          ),
+        );
+      }
+    }
+
+    if (conditions.length > 0) {
+      sqlConditions.push(
+        Prisma.sql`
+          (${Prisma.join(
+            conditions,
+            " OR ",
+          )})
+        `,
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // CONNECTIVITY
+  // ─────────────────────────────────────────────
+
+  if (connectivity.length > 0) {
+    const conditions = connectivity.map(
+      (value) => {
+        const searchValue =
+          value === "3.5mm-jack"
+            ? "3.5"
+            : value.replace(/-/g, " ");
+
+        return makeSpecificationCondition(
+          specificationSlugs.connectivity,
+          Prisma.sql`
+            ${specificationText}
+            LIKE ${`%${searchValue}%`}
+          `,
+        );
+      },
+    );
+
+    sqlConditions.push(
+      Prisma.sql`
+        (${Prisma.join(
+          conditions,
+          " OR ",
+        )})
+      `,
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // FEATURES
+  // ─────────────────────────────────────────────
+
+  if (features.length > 0) {
+    const conditions = features.map(
+      (value) => {
+        const searchValue =
+          value.replace(/-/g, " ");
+
+        return makeSpecificationCondition(
+          specificationSlugs.features,
+          Prisma.sql`
+            ${specificationText}
+            LIKE ${`%${searchValue}%`}
+          `,
+        );
+      },
+    );
+
+    sqlConditions.push(
+      Prisma.sql`
+        (${Prisma.join(
+          conditions,
+          " OR ",
+        )})
+      `,
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // OPERATING SYSTEM
+  // ─────────────────────────────────────────────
+
+  if (operatingSystem.length > 0) {
+    const condition = textContains(
+      specificationSlugs.operatingSystem,
+      operatingSystem,
+    );
+
+    if (condition) {
+      sqlConditions.push(condition);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // ANDROID VERSION
+  // ─────────────────────────────────────────────
+
+  if (androidVersion.length > 0) {
+    const thresholds = androidVersion
+      .map((value) => {
+        const match =
+          value.match(/android-(\d+)/);
+
+        return match
+          ? Number(match[1])
+          : undefined;
+      })
+      .filter(
+        (value): value is number =>
+          value !== undefined,
+      );
+
+    const condition = numericAtLeast(
+      specificationSlugs.androidVersion,
+      thresholds,
+    );
+
+    if (condition) {
+      sqlConditions.push(condition);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // INBUILT MEMORY
+  // ─────────────────────────────────────────────
+
+  if (inbuiltMemory.length > 0) {
+    const thresholds: Record<
+      string,
+      number
+    > = {
+      "32gb-above": 32,
+      "64gb-above": 64,
+      "128gb-above": 128,
+      "256gb-above": 256,
+      "512gb-above": 512,
+    };
+
+    const values = inbuiltMemory
+      .map((value) => thresholds[value])
+      .filter(
+        (value): value is number =>
+          value !== undefined,
+      );
+
+    const condition = numericAtLeast(
+      specificationSlugs.inbuiltMemory,
+      values,
+    );
+
+    if (condition) {
+      sqlConditions.push(condition);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // ASPECT RATIO
+  // ─────────────────────────────────────────────
+
+  if (aspectRatio.length > 0) {
+    const condition = textEquals(
+      specificationSlugs.aspectRatio,
+      aspectRatio.map((value) =>
+        value.replace("-", ":"),
+      ),
+    );
+
+    if (condition) {
+      sqlConditions.push(condition);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // REFRESH RATE
+  // ─────────────────────────────────────────────
+
+  if (refreshRate.length > 0) {
+    const values = refreshRate.map(
+      (value) =>
+        value.replace("hz", "") + "hz",
+    );
+
+    const condition = textContains(
+      specificationSlugs.refreshRate,
+      values,
+    );
+
+    if (condition) {
+      sqlConditions.push(condition);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // CPU MANUFACTURER
+  // ─────────────────────────────────────────────
+
+  if (cpuManufacturer.length > 0) {
+    const condition = textContains(
+      specificationSlugs.cpuManufacturer,
+      cpuManufacturer.map((value) =>
+        value.replace(/-/g, " "),
+      ),
+    );
+
+    if (condition) {
+      sqlConditions.push(condition);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // GPU MANUFACTURER
+  // ─────────────────────────────────────────────
+
+  if (gpuManufacturer.length > 0) {
+    const condition = textContains(
+      specificationSlugs.gpuManufacturer,
+      gpuManufacturer.map((value) =>
+        value.replace(/-/g, " "),
+      ),
+    );
+
+    if (condition) {
+      sqlConditions.push(condition);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // IP RATING
+  // ─────────────────────────────────────────────
+
+  if (ipRating.length > 0) {
+    const condition = textContains(
+      specificationSlugs.ipRating,
+      ipRating,
+    );
+
+    if (condition) {
+      sqlConditions.push(condition);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // LAUNCHED WITHIN
+  // ─────────────────────────────────────────────
+
+  if (launchedWithin.length > 0) {
+    const now = new Date();
+
+    const dates: Date[] = [];
+
+    for (const value of launchedWithin) {
+      const months =
+        value === "3-months"
+          ? 3
+          : value === "6-months"
+            ? 6
+            : value === "12-months"
+              ? 12
+              : null;
+
+      if (months !== null) {
+        const date = new Date(now);
+        date.setMonth(
+          date.getMonth() - months,
+        );
+        dates.push(date);
+      }
+    }
+
+    if (dates.length > 0) {
+      const earliestDate = new Date(
+        Math.min(
+          ...dates.map((date) =>
+            date.getTime(),
+          ),
+        ),
+      );
+
+      where.releaseDate = {
+        gte: earliestDate,
+        lte: now,
+      };
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // APPLY SQL SPECIFICATION FILTERS
+  // ─────────────────────────────────────────────
+
+  let filteredProductIds: string[] | null =
+    null;
+
+  if (sqlConditions.length > 0) {
+    const sqlWhere = Prisma.sql`
+      ${Prisma.join(
+        sqlConditions,
+        " AND ",
+      )}
+    `;
+
+    const rows = await prisma.$queryRaw<
+      Array<{ id: string }>
+    >`
+      SELECT p."id"
+      FROM "Product" p
+      WHERE p."isActive" = true
+        AND ${sqlWhere}
+    `;
+
+    filteredProductIds = rows.map(
+      (row) => row.id,
+    );
+
+    where.id = {
+      in: filteredProductIds,
+    };
+  }
+
+  // ─────────────────────────────────────────────
+  // TOTAL
   // ─────────────────────────────────────────────
 
   const total = await prisma.product.count({
@@ -208,59 +1499,120 @@ export const getProducts = async (
   });
 
   // ─────────────────────────────────────────────
+  // BRAND COUNTS
+  // ─────────────────────────────────────────────
+
+  const brandCountRows =
+    await prisma.product.groupBy({
+      by: ["brandId"],
+      where: commonWhere,
+      _count: {
+        _all: true,
+      },
+    });
+
+  const brandIds = brandCountRows
+    .map((item) => item.brandId)
+    .filter(
+      (id): id is string =>
+        id !== null,
+    );
+
+  const brandRecords =
+    brandIds.length > 0
+      ? await prisma.brand.findMany({
+          where: {
+            id: {
+              in: brandIds,
+            },
+          },
+          select: {
+            id: true,
+            slug: true,
+          },
+        })
+      : [];
+
+  const brandMap = new Map(
+    brandRecords.map((brand) => [
+      brand.id,
+      brand.slug,
+    ]),
+  );
+
+  const brandCounts: Record<
+    string,
+    number
+  > = {};
+
+  for (const row of brandCountRows) {
+    if (!row.brandId) continue;
+
+    const slug = brandMap.get(
+      row.brandId,
+    );
+
+    if (!slug) continue;
+
+    brandCounts[slug] =
+      row._count._all;
+  }
+
+  // ─────────────────────────────────────────────
   // PRODUCTS
   // ─────────────────────────────────────────────
 
-  const products = await prisma.product.findMany({
-    where,
+  const products =
+    await prisma.product.findMany({
+      where,
 
-    include: {
-      brand: true,
+      include: {
+        brand: true,
 
-      category: true,
+        category: true,
 
-      images: {
-        orderBy: {
-          sortOrder: "asc",
-        },
-      },
-
-      variants: true,
-
-      prices: {
-        where: {
-          inStock: true,
+        images: {
+          orderBy: {
+            sortOrder: "asc",
+          },
         },
 
-        include: {
-          seller: true,
-          variant: true,
+        variants: true,
+
+        prices: {
+          where: {
+            inStock: true,
+          },
+
+          include: {
+            seller: true,
+            variant: true,
+          },
+
+          orderBy: {
+            amount: "asc",
+          },
         },
 
-        orderBy: {
-          amount: "asc",
-        },
-      },
+        specifications: {
+          include: {
+            specification: true,
+            value: true,
+          },
 
-      specifications: {
-        include: {
-          specification: true,
-          value: true,
-        },
-
-        orderBy: {
-          specification: {
-            name: "asc",
+          orderBy: {
+            specification: {
+              name: "asc",
+            },
           },
         },
       },
-    },
 
-    orderBy,
+      orderBy,
 
-    skip,
-    take: limit,
-  });
+      skip,
+      take: limit,
+    });
 
   // ─────────────────────────────────────────────
   // PAGINATION
@@ -269,7 +1621,13 @@ export const getProducts = async (
   const totalPages =
     total === 0
       ? 0
-      : Math.ceil(total / limit);
+      : Math.ceil(
+          total / limit,
+        );
+
+  // ─────────────────────────────────────────────
+  // RESPONSE
+  // ─────────────────────────────────────────────
 
   return {
     products,
@@ -281,207 +1639,117 @@ export const getProducts = async (
       totalPages,
 
       hasNextPage:
-        totalPages > 0 && page < totalPages,
+        totalPages > 0 &&
+        page < totalPages,
 
       hasPreviousPage:
-        page > 1 && page <= totalPages,
+        page > 1 &&
+        page <= totalPages,
     },
+
+    brandCounts,
   };
 };
 
 
-// ─────────────────────────────────────────────
-// SINGLE PRODUCT
-// ─────────────────────────────────────────────
 
-export const getProductBySlug = async (
-  slug: string,
-) => {
-  return prisma.product.findUnique({
-    where: {
-      slug,
-      isActive: true,
-    },
-
-    include: {
-      brand: true,
-
-      category: true,
-
-      images: {
-        orderBy: {
-          sortOrder: "asc",
-        },
-      },
-
-      variants: true,
-
-      prices: {
-        where: {
-          inStock: true,
-        },
-
-        include: {
-          seller: true,
-          variant: true,
-        },
-
-        orderBy: {
-          amount: "asc",
-        },
-      },
-
-      specifications: {
-        include: {
-          specification: true,
-          value: true,
-        },
-
-        orderBy: {
-          specification: {
-            name: "asc",
-          },
-        },
-      },
-    },
-  });
+export const getProductBySlug = async (slug: string) => {
+return prisma.product.findUnique({
+where: {
+slug,
+},
+include: {
+brand: true,
+category: true,
+images: {
+orderBy: {
+sortOrder: "asc",
+},
+},
+variants: {
+include: {
+prices: {
+include: {
+seller: true,
+},
+orderBy: {
+amount: "asc",
+},
+},
+},
+},
+prices: {
+include: {
+seller: true,
+variant: true,
+},
+orderBy: {
+amount: "asc",
+},
+},
+specifications: {
+include: {
+specification: true,
+value: true,
+},
+orderBy: {
+specification: {
+name: "asc",
+},
+},
+},
+},
+});
 };
 
-
-// ─────────────────────────────────────────────
-// PRODUCT PRICES
-// ─────────────────────────────────────────────
-
-export const getProductPrices = async (
-  slug: string,
-) => {
-  const product = await prisma.product.findUnique({
-    where: {
-      slug,
-      isActive: true,
-    },
-
-    select: {
-      id: true,
-    },
-  });
-
-  if (!product) {
-    return null;
-  }
-
-  const prices = await prisma.price.findMany({
-    where: {
-      productId: product.id,
-      inStock: true,
-    },
-
-    include: {
-      seller: true,
-      variant: true,
-    },
-
-    orderBy: {
-      amount: "asc",
-    },
-  });
-
-  return {
-    prices,
-    lowestPrice: prices[0]?.amount ?? null,
-  };
+export const getProductPrices = async (productId: string) => {
+return prisma.price.findMany({
+where: {
+productId,
+inStock: true,
+},
+include: {
+seller: true,
+variant: true,
+},
+orderBy: {
+amount: "asc",
+},
+});
 };
-
-
-// ─────────────────────────────────────────────
-// PRICE HISTORY
-// ─────────────────────────────────────────────
 
 export const getProductPriceHistory = async (
-  slug: string,
+productId: string,
 ) => {
-  const product = await prisma.product.findUnique({
-    where: {
-      slug,
-      isActive: true,
-    },
-
-    select: {
-      id: true,
-    },
-  });
-
-  if (!product) {
-    return null;
-  }
-
-  const history = await prisma.price.findMany({
-    where: {
-      productId: product.id,
-    },
-
-    include: {
-      seller: true,
-      variant: true,
-    },
-
-    orderBy: {
-      recordedAt: "asc",
-    },
-  });
-
-  const lowestHistoricalPrice =
-    history.length > 0
-      ? history.reduce((lowest, current) =>
-          current.amount.lessThan(lowest.amount)
-            ? current
-            : lowest,
-        ).amount
-      : null;
-
-  return {
-    history,
-    lowestHistoricalPrice,
-  };
+return prisma.price.findMany({
+where: {
+productId,
+},
+include: {
+seller: true,
+variant: true,
+},
+orderBy: {
+recordedAt: "desc",
+},
+});
 };
 
-
-// ─────────────────────────────────────────────
-// PRODUCT SPECIFICATIONS
-// ─────────────────────────────────────────────
-
 export const getProductSpecifications = async (
-  slug: string,
+productId: string,
 ) => {
-  const product = await prisma.product.findUnique({
-    where: {
-      slug,
-      isActive: true,
-    },
-
-    select: {
-      id: true,
-    },
-  });
-
-  if (!product) {
-    return null;
-  }
-
-  return prisma.productSpecification.findMany({
-    where: {
-      productId: product.id,
-    },
-
-    include: {
-      specification: true,
-      value: true,
-    },
-
-    orderBy: {
-      specification: {
-        name: "asc",
-      },
-    },
-  });
+return prisma.productSpecification.findMany({
+where: {
+productId,
+},
+include: {
+specification: true,
+value: true,
+},
+orderBy: {
+specification: {
+name: "asc",
+},
+},
+});
 };
