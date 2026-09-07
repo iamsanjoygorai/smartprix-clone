@@ -26,6 +26,21 @@ const toNumber = (value: unknown): number | undefined => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+const normalizeSearchText = (value: string): string => {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
+const getSearchTokens = (value: string): string[] => {
+  return normalizeSearchText(value)
+    .split(" ")
+    .map((token) => token.trim())
+    .filter(Boolean);
+};
+
 const specificationSlugs: Record<string, string[]> = {
   display: [
     "display",
@@ -287,9 +302,129 @@ const numericRange = (
   `;
 };
 
+
+// fuzzy-search function
+const findSimilarProductIds = async (
+  search: string,
+): Promise<string[]> => {
+  const normalizedSearch = normalizeSearchText(search);
+
+  if (!normalizedSearch) {
+    return [];
+  }
+
+  const rows = await prisma.$queryRaw<
+  Array<{
+    id: string;
+    score: number;
+  }>
+>`
+  WITH product_search AS (
+    SELECT
+      p."id",
+
+      LOWER(COALESCE(p."name", '')) AS product_name,
+      LOWER(COALESCE(b."name", '')) AS brand_name,
+
+      LOWER(
+        COALESCE(
+          (
+            SELECT STRING_AGG(
+              CONCAT_WS(
+                ' ',
+                pv."name",
+                pv."sku",
+                pv."color",
+                pv."storage",
+                pv."ram"
+              ),
+              ' '
+            )
+            FROM "ProductVariant" pv
+            WHERE pv."productId" = p."id"
+          ),
+          ''
+        )
+      ) AS variants
+
+    FROM "Product" p
+
+    INNER JOIN "Brand" b
+      ON b."id" = p."brandId"
+
+    WHERE p."isActive" = true
+  ),
+
+  scored AS (
+    SELECT
+      ps."id",
+
+      (
+        /* Exact product name */
+        CASE
+          WHEN ps.product_name ILIKE ${`%${normalizedSearch}%`}
+          THEN 100
+          ELSE 0
+        END
+
+        +
+
+        /* Exact brand */
+        CASE
+          WHEN ps.brand_name ILIKE ${`%${normalizedSearch}%`}
+          THEN 90
+          ELSE 0
+        END
+
+        +
+
+        /* Fuzzy product name */
+        word_similarity(
+          ${normalizedSearch},
+          ps.product_name
+        ) * 100
+
+        +
+
+        /* Fuzzy brand */
+        word_similarity(
+          ${normalizedSearch},
+          ps.brand_name
+        ) * 80
+
+        +
+
+        /* Fuzzy variants */
+        word_similarity(
+          ${normalizedSearch},
+          ps.variants
+        ) * 40
+
+      ) AS score
+
+    FROM product_search ps
+  )
+
+  SELECT
+    "id",
+    score
+  FROM scored
+
+  WHERE score >= 25
+
+  ORDER BY score DESC
+
+  LIMIT 500
+`;
+
+  return rows.map((row) => row.id);
+};
+
+
 // ─────────────────────────────────────────────
 // PRODUCTS
 // ─────────────────────────────────────────────
+
 
 export const getProducts = async (
   query: Record<string, unknown>,
@@ -486,32 +621,7 @@ export const getProducts = async (
   const commonWhere: Prisma.ProductWhereInput = {
     isActive: true,
 
-    ...(search
-      ? {
-          OR: [
-            {
-              name: {
-                contains: search,
-                mode: "insensitive",
-              },
-            },
-            {
-              description: {
-                contains: search,
-                mode: "insensitive",
-              },
-            },
-            {
-              shortDescription: {
-                contains: search,
-                mode: "insensitive",
-              },
-            },
-          ],
-        }
-      : {}),
-
-    ...(category
+  ...(category
       ? {
           category: {
             slug: category,
@@ -560,6 +670,23 @@ export const getProducts = async (
         }
       : {}),
   };
+
+
+  // ─────────────────────────────────────────────
+// SIMILAR / FUZZY SEARCH
+// ─────────────────────────────────────────────
+
+let similarProductIds: string[] | null = null;
+
+if (search) {
+  similarProductIds =
+    await findSimilarProductIds(search);
+
+  where.id = {
+    in: similarProductIds,
+  };
+}
+
 
   // ─────────────────────────────────────────────
   // AVAILABILITY
@@ -1485,9 +1612,44 @@ export const getProducts = async (
       (row) => row.id,
     );
 
-    where.id = {
-      in: filteredProductIds,
-    };
+    if (sqlConditions.length > 0) {
+  const sqlWhere = Prisma.sql`
+    ${Prisma.join(
+      sqlConditions,
+      " AND ",
+    )}
+  `;
+
+  const rows = await prisma.$queryRaw<
+    Array<{ id: string }>
+  >`
+    SELECT p."id"
+    FROM "Product" p
+    WHERE p."isActive" = true
+      AND ${sqlWhere}
+  `;
+
+  filteredProductIds = rows.map(
+    (row) => row.id,
+  );
+
+  // Intersect specification results
+  // with fuzzy-search results.
+  if (similarProductIds !== null) {
+    const similarIdSet = new Set(
+      similarProductIds,
+    );
+
+    filteredProductIds =
+      filteredProductIds.filter((id) =>
+        similarIdSet.has(id),
+      );
+  }
+
+  where.id = {
+    in: filteredProductIds,
+  };
+}
   }
 
   // ─────────────────────────────────────────────
@@ -1562,13 +1724,118 @@ export const getProducts = async (
   // PRODUCTS
   // ─────────────────────────────────────────────
 
-  const products =
+  let products;
+
+if (
+  similarProductIds !== null &&
+  similarProductIds.length > 0 &&
+  sort === "relevance"
+) {
+  // First get all IDs that satisfy the
+  // normal Prisma filters.
+  const matchingProducts =
+    await prisma.product.findMany({
+      where,
+      select: {
+        id: true,
+      },
+    });
+
+  const matchingIdSet = new Set(
+    matchingProducts.map(
+      (product) => product.id,
+    ),
+  );
+
+  // Keep only products that satisfy all
+  // filters, while preserving fuzzy-search
+  // relevance order.
+  const rankedIds =
+    similarProductIds.filter((id) =>
+      matchingIdSet.has(id),
+    );
+
+  const paginatedIds = rankedIds.slice(
+    skip,
+    skip + limit,
+  );
+
+  if (paginatedIds.length === 0) {
+    products = [];
+  } else {
+    const fetchedProducts =
+      await prisma.product.findMany({
+        where: {
+          id: {
+            in: paginatedIds,
+          },
+        },
+
+        include: {
+          brand: true,
+          category: true,
+
+          images: {
+            orderBy: {
+              sortOrder: "asc",
+            },
+          },
+
+          variants: true,
+
+          prices: {
+            where: {
+              inStock: true,
+            },
+
+            include: {
+              seller: true,
+              variant: true,
+            },
+
+            orderBy: {
+              amount: "asc",
+            },
+          },
+
+          specifications: {
+            include: {
+              specification: true,
+              value: true,
+            },
+
+            orderBy: {
+              specification: {
+                name: "asc",
+              },
+            },
+          },
+        },
+      });
+
+    const productMap = new Map(
+      fetchedProducts.map((product) => [
+        product.id,
+        product,
+      ]),
+    );
+
+    products = paginatedIds
+      .map((id) => productMap.get(id))
+      .filter(
+        (
+          product,
+        ): product is NonNullable<typeof product> =>
+          Boolean(product),
+      );
+  }
+} else {
+  products =
     await prisma.product.findMany({
       where,
 
       include: {
         brand: true,
-
         category: true,
 
         images: {
@@ -1609,10 +1876,10 @@ export const getProducts = async (
       },
 
       orderBy,
-
       skip,
       take: limit,
     });
+}
 
   // ─────────────────────────────────────────────
   // PAGINATION
