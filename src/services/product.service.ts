@@ -2112,10 +2112,19 @@ if (
         },
 
         include: {
-          brand: true,
-          category: true,
+  brand: true,
+  category: true,
 
-          images: {
+  reviews: {
+    where: {
+      isPublished: true,
+    },
+    select: {
+      rating: true,
+    },
+  },
+
+  images: {
             orderBy: {
               sortOrder: "asc",
             },
@@ -2175,10 +2184,19 @@ if (
       where,
 
       include: {
-        brand: true,
-        category: true,
+  brand: true,
+  category: true,
 
-        images: {
+  reviews: {
+    where: {
+      isPublished: true,
+    },
+    select: {
+      rating: true,
+    },
+  },
+
+  images: {
           orderBy: {
             sortOrder: "asc",
           },
