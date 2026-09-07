@@ -157,6 +157,56 @@ const specificationSlugs: Record<string, string[]> = {
   ],
 };
 
+const laptopSpecificationSlugs: Record<string, string[]> = {
+  processor: [
+    "processor",
+    "cpu",
+    "chipset",
+  ],
+
+  ram: [
+    "ram",
+    "memory",
+    "system-memory",
+  ],
+
+  storage: [
+    "storage",
+    "internal-storage",
+    "inbuilt-storage",
+    "ssd",
+    "hard-disk",
+    "hdd",
+  ],
+
+  graphics: [
+    "graphics",
+    "gpu",
+    "graphics-processor",
+    "graphic-card",
+    "dedicated-graphics",
+  ],
+
+  screenSize: [
+    "screen-size",
+    "display-size",
+    "display-size-inches",
+    "screen",
+  ],
+
+  display: [
+    "display",
+    "screen",
+    "display-type",
+    "screen-type",
+  ],
+
+  operatingSystem: [
+    "operating-system",
+    "os",
+  ],
+};
+
 // ─────────────────────────────────────────────
 // SPECIFICATION SQL HELPERS
 // ─────────────────────────────────────────────
@@ -456,6 +506,26 @@ export const getProducts = async (
 
   const displays = toStringArray(query.displays);
 
+  // ─────────────────────────────────────────────
+// LAPTOP FILTER PARAMETERS
+// ─────────────────────────────────────────────
+
+const processors = toStringArray(
+  query.processors,
+);
+
+const rams = toStringArray(
+  query.rams,
+);
+
+const storages = toStringArray(
+  query.storages,
+);
+
+const gpus = toStringArray(
+  query.gpus,
+);
+
   const availability = toStringArray(
     query.availability,
   );
@@ -749,7 +819,55 @@ if (search) {
   // DISPLAY
   // ─────────────────────────────────────────────
 
-  if (displays.length > 0) {
+  // ─────────────────────────────────────────────
+// DISPLAY
+// ─────────────────────────────────────────────
+
+if (displays.length > 0) {
+  if (category === "laptops") {
+    // Laptop display filter represents screen-size ranges.
+    const ranges: Array<
+      [number, number | null]
+    > = [];
+
+    for (const value of displays) {
+      switch (value) {
+        case '13 - 14"':
+        case "13-14":
+        case "13-14-inch":
+          ranges.push([13, 14]);
+          break;
+
+        case '15 - 15.6"':
+        case "15-15.6":
+        case "15-15.6-inch":
+          ranges.push([15, 15.6]);
+          break;
+
+        case '16"':
+        case "16":
+        case "16-inch":
+          ranges.push([16, 16]);
+          break;
+
+        case '17" and above':
+        case "17-above":
+        case "17-inch-above":
+          ranges.push([17, null]);
+          break;
+      }
+    }
+
+    const screenSizeCondition = numericRange(
+      laptopSpecificationSlugs.screenSize,
+      ranges,
+    );
+
+    if (screenSizeCondition) {
+      sqlConditions.push(screenSizeCondition);
+    }
+  } else {
+    // Existing mobile display behaviour.
     const displayCondition = textContains(
       specificationSlugs.display,
       displays,
@@ -759,6 +877,7 @@ if (search) {
       sqlConditions.push(displayCondition);
     }
   }
+}
 
   // ─────────────────────────────────────────────
   // TYPES
@@ -1509,6 +1628,185 @@ if (search) {
   }
 
   // ─────────────────────────────────────────────
+// LAPTOP PROCESSOR
+// ─────────────────────────────────────────────
+
+if (
+  category === "laptops" &&
+  processors.length > 0
+) {
+  const conditions = processors.map(
+    (value) => {
+      const normalizedValue = value
+        .replace(/\s+/g, " ")
+        .trim();
+
+      return makeSpecificationCondition(
+        laptopSpecificationSlugs.processor,
+        Prisma.sql`
+          ${specificationText}
+          LIKE ${`%${normalizedValue}%`}
+        `,
+      );
+    },
+  );
+
+  if (conditions.length > 0) {
+    sqlConditions.push(
+      Prisma.sql`
+        (${Prisma.join(
+          conditions,
+          " OR ",
+        )})
+      `,
+    );
+  }
+}
+
+
+// ─────────────────────────────────────────────
+// LAPTOP RAM
+// ─────────────────────────────────────────────
+
+if (
+  category === "laptops" &&
+  rams.length > 0
+) {
+  const thresholds = rams
+    .map((value) => {
+      const match =
+        value.match(/(\d+(?:\.\d+)?)\s*gb/i);
+
+      return match
+        ? Number(match[1])
+        : undefined;
+    })
+    .filter(
+      (value): value is number =>
+        value !== undefined,
+    );
+
+  const ramCondition = numericAtLeast(
+    laptopSpecificationSlugs.ram,
+    thresholds,
+  );
+
+  if (ramCondition) {
+    sqlConditions.push(ramCondition);
+  }
+}
+
+
+// ─────────────────────────────────────────────
+// LAPTOP STORAGE
+// ─────────────────────────────────────────────
+
+if (
+  category === "laptops" &&
+  storages.length > 0
+) {
+  const conditions: Prisma.Sql[] = [];
+
+  for (const value of storages) {
+    const normalizedValue = value
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const match = normalizedValue.match(
+      /(\d+(?:\.\d+)?)\s*(tb|gb)/i,
+    );
+
+    if (match) {
+      const amount = Number(match[1]);
+      const unit = match[2].toLowerCase();
+
+      const gbAmount =
+        unit === "tb"
+          ? amount * 1024
+          : amount;
+
+      conditions.push(
+        makeSpecificationCondition(
+          laptopSpecificationSlugs.storage,
+          Prisma.sql`
+            (
+              ${specificationText}
+              LIKE ${`%${normalizedValue}%`}
+            )
+            OR
+            (
+              ${specificationNumber}
+              >= ${gbAmount}
+              AND
+              ${specificationText}
+              LIKE '%ssd%'
+            )
+          `,
+        ),
+      );
+    } else {
+      conditions.push(
+        makeSpecificationCondition(
+          laptopSpecificationSlugs.storage,
+          Prisma.sql`
+            ${specificationText}
+            LIKE ${`%${normalizedValue}%`}
+          `,
+        ),
+      );
+    }
+  }
+
+  if (conditions.length > 0) {
+    sqlConditions.push(
+      Prisma.sql`
+        (${Prisma.join(
+          conditions,
+          " OR ",
+        )})
+      `,
+    );
+  }
+}
+
+
+// ─────────────────────────────────────────────
+// LAPTOP GRAPHICS / GPU
+// ─────────────────────────────────────────────
+
+if (
+  category === "laptops" &&
+  gpus.length > 0
+) {
+  const conditions = gpus.map(
+    (value) => {
+      const normalizedValue = value
+        .replace(/\s+/g, " ")
+        .trim();
+
+      return makeSpecificationCondition(
+        laptopSpecificationSlugs.graphics,
+        Prisma.sql`
+          ${specificationText}
+          LIKE ${`%${normalizedValue}%`}
+        `,
+      );
+    },
+  );
+
+  if (conditions.length > 0) {
+    sqlConditions.push(
+      Prisma.sql`
+        (${Prisma.join(
+          conditions,
+          " OR ",
+        )})
+      `,
+    );
+  }
+}
+
+  // ─────────────────────────────────────────────
   // GPU MANUFACTURER
   // ─────────────────────────────────────────────
 
@@ -1608,9 +1906,51 @@ if (search) {
         AND ${sqlWhere}
     `;
 
-    filteredProductIds = rows.map(
-      (row) => row.id,
+    // ─────────────────────────────────────────────
+// APPLY SQL SPECIFICATION FILTERS
+// ─────────────────────────────────────────────
+
+let filteredProductIds: string[] | null =
+  null;
+
+if (sqlConditions.length > 0) {
+  const sqlWhere = Prisma.sql`
+    ${Prisma.join(
+      sqlConditions,
+      " AND ",
+    )}
+  `;
+
+  const rows = await prisma.$queryRaw<
+    Array<{ id: string }>
+  >`
+    SELECT p."id"
+    FROM "Product" p
+    WHERE p."isActive" = true
+      AND ${sqlWhere}
+  `;
+
+  filteredProductIds = rows.map(
+    (row) => row.id,
+  );
+
+  // Intersect specification results
+  // with fuzzy-search results.
+  if (similarProductIds !== null) {
+    const similarIdSet = new Set(
+      similarProductIds,
     );
+
+    filteredProductIds =
+      filteredProductIds.filter(
+        (id) => similarIdSet.has(id),
+      );
+  }
+
+  where.id = {
+    in: filteredProductIds,
+  };
+}
 
     if (sqlConditions.length > 0) {
   const sqlWhere = Prisma.sql`
@@ -1665,9 +2005,9 @@ if (search) {
   // ─────────────────────────────────────────────
 
   const brandCountRows =
-    await prisma.product.groupBy({
-      by: ["brandId"],
-      where: commonWhere,
+  await prisma.product.groupBy({
+    by: ["brandId"],
+    where: commonWhere,
       _count: {
         _all: true,
       },
