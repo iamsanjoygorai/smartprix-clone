@@ -29,6 +29,7 @@ import adminAuditRoutes from "./admin-audit.routes";
 import reviewRoutes from "./review.routes";
 import adminCategoryRoutes from "./admin-category.routes";
 import adminBrandRoutes from "./admin-brand.routes";
+import adminSpecificationRoutes from "./admin-specification.routes";
 
 const router = Router();
 
@@ -114,6 +115,16 @@ router.use(
   adminBrandRoutes,
 );
 
+
+// ==================================================
+// ADMIN PRODUCT SPECIFICATIONS
+// ==================================================
+
+router.use(
+  "/admin/specifications",
+  requireAuth,
+  adminSpecificationRoutes,
+);
 
 // ==================================================
 // ADMIN PRODUCT CATEGORIES
