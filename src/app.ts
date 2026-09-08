@@ -34,6 +34,19 @@ app.use(
   express.static(path.join(process.cwd(), "uploads")),
 );
 
+
+app.use(
+  "/uploads",
+  express.static(path.join(process.cwd(), "uploads")),
+);
+
+app.get("/debug-review", (_req, res) => {
+  res.json({
+    success: true,
+    message: "This is the app.ts file currently running",
+  });
+});
+
 app.use("/api", router);
 
 export default app;

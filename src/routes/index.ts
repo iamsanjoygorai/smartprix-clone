@@ -26,6 +26,7 @@ import adminManagementRoutes from "./admin-management.routes";
 import adminUserRoutes from "./admin-user.routes";
 import adminSettingsRoutes from "./admin-settings.routes";
 import adminAuditRoutes from "./admin-audit.routes";
+import reviewRoutes from "./review.routes";
 
 const router = Router();
 
@@ -83,6 +84,13 @@ router.use("/sellers", sellerRoutes);
 // ==============================
 
 router.use("/news", newsRoutes);
+
+
+// ==============================
+// Public Reviews
+// ==============================
+
+router.use("/reviews", reviewRoutes);
 
 // ==================================================
 // ADMIN PRODUCTS
