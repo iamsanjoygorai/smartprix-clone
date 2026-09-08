@@ -13,16 +13,16 @@ export const updateAdminProduct = async (
     throw new Error("Product not found");
   }
 
-  const {
-    name,
-    description,
-    brandSlug,
-    categorySlug,
-    image,
-    price,
-    sellerSlug,
-    specifications,
-  } = input;
+ const {
+  name,
+  description,
+  brandSlug,
+  categorySlug,
+  images,
+  price,
+  sellerSlug,
+  specifications,
+} = input;
 
   const brand = brandSlug
     ? await prisma.brand.findUnique({ where: { slug: brandSlug } })
@@ -59,27 +59,22 @@ export const updateAdminProduct = async (
       },
     });
 
-    if (image !== undefined) {
-      const existingImage = await tx.productImage.findFirst({
-        where: { productId },
-        orderBy: { sortOrder: "asc" },
-      });
+    if (images !== undefined) {
+  await tx.productImage.deleteMany({
+    where: { productId },
+  });
 
-      if (existingImage) {
-        await tx.productImage.update({
-          where: { id: existingImage.id },
-          data: { url: image },
-        });
-      } else {
-        await tx.productImage.create({
-          data: {
-            productId,
-            url: image,
-            sortOrder: 0,
-          },
-        });
-      }
-    }
+  for (const [index, imageUrl] of images.entries()) {
+    await tx.productImage.create({
+      data: {
+        productId,
+        url: imageUrl,
+        sortOrder: index,
+        isPrimary: index === 0,
+      },
+    });
+  }
+}
 
     if (price !== undefined || seller) {
       const existingPrice = await tx.price.findFirst({

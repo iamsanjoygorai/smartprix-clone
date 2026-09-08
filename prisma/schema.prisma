@@ -235,6 +235,7 @@ model Specification {
   slug     String  @unique
   unit     String?
   dataType String  @default("text")
+  group    String  @default("General")
 
   values   SpecificationValue[]
   products ProductSpecification[]

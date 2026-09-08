@@ -27,6 +27,8 @@ import adminUserRoutes from "./admin-user.routes";
 import adminSettingsRoutes from "./admin-settings.routes";
 import adminAuditRoutes from "./admin-audit.routes";
 import reviewRoutes from "./review.routes";
+import adminCategoryRoutes from "./admin-category.routes";
+import adminBrandRoutes from "./admin-brand.routes";
 
 const router = Router();
 
@@ -92,23 +94,35 @@ router.use("/news", newsRoutes);
 
 router.use("/reviews", reviewRoutes);
 
-// ==================================================
-// ADMIN PRODUCTS
-// ==================================================
-//
-// Authentication is handled here.
-// Individual product permissions are handled
-// inside admin-product.routes.ts.
-//
-// /admin/products
-// /admin/products/:id
-// /admin/products/upload-images
-//
-
 router.use(
   "/admin",
   requireAuth,
   adminUserRoutes,
+);
+
+
+router.use(
+  "/admin",
+  requireAuth,
+  adminProductRoutes,
+);
+
+
+router.use(
+  "/admin/brands",
+  requireAuth,
+  adminBrandRoutes,
+);
+
+
+// ==================================================
+// ADMIN PRODUCT CATEGORIES
+// ==================================================
+
+router.use(
+  "/admin/categories",
+  requireAuth,
+  adminCategoryRoutes,
 );
 
 

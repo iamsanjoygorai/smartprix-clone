@@ -25,11 +25,10 @@ export const updateProductSchema = z.object({
     .min(1, "Category is required")
     .optional(),
 
-  image: z
-    .string()
-    .trim()
-    .url("Image must be a valid URL")
-    .optional(),
+  images: z
+  .array(z.string().trim().min(1))
+  .max(10, "Maximum 10 images are allowed")
+  .optional(),
 
   price: z
     .number()

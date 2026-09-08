@@ -273,10 +273,10 @@ const specificationDefinitions = [
   // ─────────────────────────────────────────────
   // GENERAL
   // ─────────────────────────────────────────────
+
   ["Launch Date", "launch-date"],
   ["Announced Date", "announced-date"],
   ["Operating System", "operating-system"],
-  ["OS Version", "os-version"],
   ["SIM Type", "sim-type"],
   ["Number of SIMs", "number-of-sims"],
   ["Network", "network"],
@@ -440,22 +440,165 @@ const specificationDefinitions = [
 ];
 
 for (const [name, slug] of specificationDefinitions) {
- await prisma.specification.upsert({
+  await prisma.specification.upsert({
+      where: {
+        slug,
+      },
+      update: {
+        name,
+        dataType: "text",
+      },
+      create: {
+        name,
+        slug,
+        dataType: "text",
+      },
+    });
+  }
+
+
+
+// ─────────────────────────────────────────────
+// ASUS LAPTOP SPECIFICATIONS
+// ─────────────────────────────────────────────
+
+const asusProduct = await prisma.product.findUnique({
   where: {
-    slug: "wifi-version",
-  },
-  update: {
-    name: "Wi-Fi Version",
-    dataType: "text",
-  },
-  create: {
-    name: "Wi-Fi Version",
-    slug: "wifi-version",
-    dataType: "text",
+    slug:
+      "asus-chromebook-cx15-intel-celeron-dual-core-n50-4-gb-64-gb-emmc-storage-chrome-os-cx1505cta-s70256-chromebook-laptop-15-6-inch-pure-grey-1-6-kg-1788845835890",
   },
 });
-}
 
+if (asusProduct) {
+  const asusSpecifications = [
+    // GENERAL
+    ["Series", "series", "Chromebook CX15", "General"],
+    ["Model", "model", "CX1505CTA-S70256", "General"],
+    ["Utility", "utility", "Everyday Use", "General"],
+    ["Device Type", "device-type", "Netbook", "General"],
+    ["OS", "os", "Chrome", "General"],
+    ["Dimensions", "dimensions", "359.5 x 232.2 x 20.1 mm", "General"],
+    ["Weight", "weight", "1.6 kg", "General"],
+
+    // DISPLAY
+    ["Touch", "touch", "No", "Display"],
+    ["Size", "size", "15.6 inches", "Display"],
+    ["Resolution", "resolution", "1920 x 1080 pixels", "Display"],
+    ["PPI", "ppi", "~141 PPI", "Display"],
+    ["Refresh Rate", "refresh-rate", "60 Hz", "Display"],
+    ["Anti Glare Screen", "anti-glare-screen", "Yes", "Display"],
+    ["Features", "features", "300 nits", "Display"],
+
+    // CONNECTIVITY
+    ["Ethernet", "ethernet", "No", "Connectivity"],
+    [
+      "WiFi",
+      "wifi",
+      "Wi-Fi 6 (802.11ax Dual Band) 2*2",
+      "Connectivity",
+    ],
+    ["Bluetooth", "bluetooth", "v5.4", "Connectivity"],
+    [
+      "USB Ports",
+      "usb-ports",
+      "1 x USB Type-C, 1 x USB 3.0",
+      "Connectivity",
+    ],
+    ["HDMI", "hdmi", "1 x HDMI 1.4 Port", "Connectivity"],
+    ["Microphone In", "microphone-in", "Yes", "Connectivity"],
+    ["Headphone Jack", "headphone-jack", "Yes", "Connectivity"],
+
+    // INPUT
+    ["Camera", "camera", "Yes", "Input"],
+    ["Keyboard", "keyboard", "Chiclet Keyboard", "Input"],
+    ["Touchpad", "touchpad", "Yes", "Input"],
+    ["Inbuilt Microphone", "inbuilt-microphone", "Built-in microphone", "Input"],
+    ["Speakers", "speakers", "Built-in speaker", "Input"],
+    ["Optical Drive", "optical-drive", "No", "Input"],
+
+    // PROCESSOR
+    ["Processor", "processor", "Intel Celeron N50", "Processor"],
+    ["Cache", "cache", "6 MB", "Processor"],
+    ["Brand", "processor-brand", "Intel", "Processor"],
+    ["Series", "processor-series", "Celeron", "Processor"],
+    ["Model", "processor-model", "N50", "Processor"],
+
+    // GRAPHICS
+    ["GPU", "gpu", "Intel Integrated UHD", "Graphics"],
+    ["Brand", "graphics-brand", "Intel", "Graphics"],
+
+    // MEMORY
+    ["RAM", "ram", "4 GB LPDDR5", "Memory"],
+    ["eMMC Storage", "emmc-storage", "64 GB", "Memory"],
+
+    // BATTERY
+    ["Battery", "battery", "3 Cell Battery", "Battery"],
+
+    // EXTRA
+    ["Included Software", "included-software", "MyASUS", "Extra"],
+    [
+      "Sales Package",
+      "sales-package",
+      "1 x Laptop, 1 x Power Adaptor, 1 x User Guide, 1 x Warranty Documents",
+      "Extra",
+    ],
+  ] as const;
+
+  for (const [name, slug, value, group] of asusSpecifications) {
+    const specification = await prisma.specification.upsert({
+      where: {
+        slug,
+      },
+      update: {
+        name,
+        group,
+        dataType: "text",
+      },
+      create: {
+        name,
+        slug,
+        group,
+        dataType: "text",
+      },
+    });
+
+    const existingValue = await prisma.specificationValue.findFirst({
+      where: {
+        specificationId: specification.id,
+        value,
+      },
+    });
+
+    const specificationValue =
+      existingValue ??
+      (await prisma.specificationValue.create({
+        data: {
+          specificationId: specification.id,
+          value,
+        },
+      }));
+
+    await prisma.productSpecification.upsert({
+      where: {
+        productId_specificationId: {
+          productId: asusProduct.id,
+          specificationId: specification.id,
+        },
+      },
+      update: {
+        valueId: specificationValue.id,
+        customValue: null,
+      },
+      create: {
+        productId: asusProduct.id,
+        specificationId: specification.id,
+        valueId: specificationValue.id,
+      },
+    });
+  }
+
+  console.log("💻 ASUS laptop specifications seeded successfully!");
+}
 
   // ─────────────────────────────────────────────
   // SPECIFICATION VALUES
@@ -875,52 +1018,50 @@ for (const [name, slug] of specificationDefinitions) {
   }
 
   // Create roles and assign permissions
-  for (const roleName of Object.values(ROLES)) {
-    const role = await prisma.role.upsert({
+
+ for (const roleName of Object.values(ROLES)) {
+  const role = await prisma.role.upsert({
+    where: {
+      name: roleName,
+    },
+    update: {},
+    create: {
+      name: roleName,
+      description: `${roleName} role`,
+    },
+  });
+
+  const permissions = ROLE_PERMISSIONS[roleName];
+
+  for (const permissionName of permissions) {
+    const permission = await prisma.permission.findUnique({
       where: {
-        name: roleName,
-      },
-      update: {},
-      create: {
-        name: roleName,
-        description: `${roleName} role`,
+        name: permissionName,
       },
     });
 
-    const permissions = ROLE_PERMISSIONS[roleName];
+    if (!permission) {
+      continue;
+    }
 
-    for (const permissionName of permissions) {
-      const permission = await prisma.permission.findUnique({
-        where: {
-          name: permissionName,
-        },
-      });
-
-      if (!permission) {
-        continue;
-      }
-
-      await prisma.rolePermission.upsert({
-        where: {
-          roleId_permissionId: {
-            roleId: role.id,
-            permissionId: permission.id,
-          },
-        },
-        update: {},
-        create: {
+    await prisma.rolePermission.upsert({
+      where: {
+        roleId_permissionId: {
           roleId: role.id,
           permissionId: permission.id,
         },
-      });
-    }
+      },
+      update: {},
+      create: {
+        roleId: role.id,
+        permissionId: permission.id,
+      },
+    });
   }
+}
 
-  console.log("✅ Roles and permissions seeded successfully!");
-
-
-
-  console.log("✅ Database seed completed successfully!");
+console.log("✅ Roles and permissions seeded successfully!");
+console.log("✅ Database seed completed successfully!");
 }
 
 main()
