@@ -636,53 +636,36 @@ const gpus = toStringArray(
   const skip = (page - 1) * limit;
 
   // ─────────────────────────────────────────────
-  // SORTING
-  // ─────────────────────────────────────────────
+// SORTING
+// ─────────────────────────────────────────────
 
-  const sort =
-    typeof query.sort === "string"
+// Frontend uses `sortBy`.
+// Keep `sort` as a fallback for backward compatibility.
+const sort =
+  typeof query.sortBy === "string"
+    ? query.sortBy
+    : typeof query.sort === "string"
       ? query.sort
       : "relevance";
 
-  let orderBy:
-    | { createdAt: "asc" | "desc" }
-    | { releaseDate: "asc" | "desc" }
-    | { name: "asc" | "desc" } = {
-    createdAt: "desc",
-  };
+const normalizedSort = [
+  "relevance",
+  "score",
+  "price-low",
+  "price-high",
+  "newest",
+  "oldest",
+  "name_asc",
+  "name_desc",
+].includes(sort)
+  ? sort
+  : "relevance";
 
-  switch (sort) {
-    case "newest":
-      orderBy = {
-        releaseDate: "desc",
-      };
-      break;
+  console.log("SORT DEBUG:", {
+  requestedSort: sort,
+  normalizedSort,
+});
 
-    case "oldest":
-      orderBy = {
-        releaseDate: "asc",
-      };
-      break;
-
-    case "name_asc":
-      orderBy = {
-        name: "asc",
-      };
-      break;
-
-    case "name_desc":
-      orderBy = {
-        name: "desc",
-      };
-      break;
-
-    case "relevance":
-    default:
-      orderBy = {
-        createdAt: "desc",
-      };
-      break;
-  }
 
   // ─────────────────────────────────────────────
   // COMMON PRISMA FILTERS
@@ -1910,9 +1893,6 @@ if (
 // APPLY SQL SPECIFICATION FILTERS
 // ─────────────────────────────────────────────
 
-let filteredProductIds: string[] | null =
-  null;
-
 if (sqlConditions.length > 0) {
   const sqlWhere = Prisma.sql`
     ${Prisma.join(
@@ -2064,15 +2044,23 @@ if (sqlConditions.length > 0) {
   // PRODUCTS
   // ─────────────────────────────────────────────
 
-  let products;
+  // ─────────────────────────────────────────────
+// PRODUCTS
+// ─────────────────────────────────────────────
+
+let products;
+
+// ─────────────────────────────────────────────
+// RELEVANCE SORT
+// ─────────────────────────────────────────────
 
 if (
   similarProductIds !== null &&
   similarProductIds.length > 0 &&
-  sort === "relevance"
+  normalizedSort === "relevance"
 ) {
-  // First get all IDs that satisfy the
-  // normal Prisma filters.
+  // First get all IDs that satisfy the normal
+  // Prisma filters.
   const matchingProducts =
     await prisma.product.findMany({
       where,
@@ -2087,9 +2075,7 @@ if (
     ),
   );
 
-  // Keep only products that satisfy all
-  // filters, while preserving fuzzy-search
-  // relevance order.
+  // Preserve fuzzy-search ranking.
   const rankedIds =
     similarProductIds.filter((id) =>
       matchingIdSet.has(id),
@@ -2110,21 +2096,20 @@ if (
             in: paginatedIds,
           },
         },
-
         include: {
-  brand: true,
-  category: true,
+          brand: true,
+          category: true,
 
-  reviews: {
-    where: {
-      isPublished: true,
-    },
-    select: {
-      rating: true,
-    },
-  },
+          reviews: {
+            where: {
+              isPublished: true,
+            },
+            select: {
+              rating: true,
+            },
+          },
 
-  images: {
+          images: {
             orderBy: {
               sortOrder: "asc",
             },
@@ -2136,12 +2121,10 @@ if (
             where: {
               inStock: true,
             },
-
             include: {
               seller: true,
               variant: true,
             },
-
             orderBy: {
               amount: "asc",
             },
@@ -2152,7 +2135,6 @@ if (
               specification: true,
               value: true,
             },
-
             orderBy: {
               specification: {
                 name: "asc",
@@ -2162,6 +2144,9 @@ if (
         },
       });
 
+    // Prisma does not guarantee the order of
+    // `WHERE id IN (...)`, so restore the
+    // relevance order manually.
     const productMap = new Map(
       fetchedProducts.map((product) => [
         product.id,
@@ -2174,69 +2159,373 @@ if (
       .filter(
         (
           product,
-        ): product is NonNullable<typeof product> =>
-          Boolean(product),
+        ): product is NonNullable<
+          typeof product
+        > => Boolean(product),
       );
   }
 } else {
-  products =
+  // ─────────────────────────────────────────────
+  // SERVER-SIDE SORTING
+  // ─────────────────────────────────────────────
+
+  /*
+   * For price and popularity sorting we must
+   * calculate the values from related tables.
+   *
+   * Sorting is performed BEFORE pagination.
+   */
+
+  const sortableProducts =
     await prisma.product.findMany({
       where,
 
-      include: {
-  brand: true,
-  category: true,
-
-  reviews: {
-    where: {
-      isPublished: true,
-    },
-    select: {
-      rating: true,
-    },
-  },
-
-  images: {
-          orderBy: {
-            sortOrder: "asc",
-          },
-        },
-
-        variants: true,
+      select: {
+        id: true,
+        name: true,
+        releaseDate: true,
+        createdAt: true,
 
         prices: {
           where: {
             inStock: true,
           },
-
-          include: {
-            seller: true,
-            variant: true,
-          },
-
-          orderBy: {
-            amount: "asc",
+          select: {
+            amount: true,
           },
         },
 
-        specifications: {
-          include: {
-            specification: true,
-            value: true,
+        reviews: {
+          where: {
+            isPublished: true,
           },
+          select: {
+            rating: true,
+          },
+        },
 
-          orderBy: {
-            specification: {
-              name: "asc",
-            },
+        _count: {
+          select: {
+            favorites: true,
           },
         },
       },
-
-      orderBy,
-      skip,
-      take: limit,
     });
+
+  // ─────────────────────────────────────────────
+  // CALCULATE SORT VALUE
+  // ─────────────────────────────────────────────
+
+  const sortedIds = sortableProducts
+    .map((product) => {
+      // Lowest available price.
+      const prices = product.prices.map(
+        (price) => Number(price.amount),
+      );
+
+      const lowestPrice =
+        prices.length > 0
+          ? Math.min(...prices)
+          : Number.POSITIVE_INFINITY;
+
+      // Average published review rating.
+      const ratings =
+        product.reviews
+          .map((review) => review.rating)
+          .filter(
+            (rating) =>
+              Number.isFinite(rating),
+          );
+
+      const averageRating =
+        ratings.length > 0
+          ? ratings.reduce(
+              (sum, rating) =>
+                sum + rating,
+              0,
+            ) / ratings.length
+          : 0;
+
+      /*
+       * Popularity score:
+       *
+       * Rating is weighted strongly,
+       * review count provides confidence,
+       * favorites provide an additional
+       * popularity signal.
+       *
+       * This is an internal ranking score.
+       */
+      const reviewCount =
+        product.reviews.length;
+
+      const favoriteCount =
+        product._count.favorites;
+
+      const popularityScore =
+        averageRating * 20 +
+        reviewCount * 2 +
+        favoriteCount;
+
+      return {
+        id: product.id,
+        name: product.name,
+        releaseDate:
+          product.releaseDate,
+        createdAt:
+          product.createdAt,
+        lowestPrice,
+        popularityScore,
+      };
+    })
+    .sort((a, b) => {
+      switch (normalizedSort) {
+        // ─────────────────────────────────────
+        // POPULARITY
+        // ─────────────────────────────────────
+
+        case "score":
+          if (
+            b.popularityScore !==
+            a.popularityScore
+          ) {
+            return (
+              b.popularityScore -
+              a.popularityScore
+            );
+          }
+
+          // Tie-breaker: newest product first.
+          return (
+            (b.releaseDate?.getTime() ??
+              b.createdAt.getTime()) -
+            (a.releaseDate?.getTime() ??
+              a.createdAt.getTime())
+          );
+
+        // ─────────────────────────────────────
+        // PRICE LOW → HIGH
+        // ─────────────────────────────────────
+
+        case "price-low":
+          if (
+            a.lowestPrice !==
+            b.lowestPrice
+          ) {
+            return (
+              a.lowestPrice -
+              b.lowestPrice
+            );
+          }
+
+          return a.name.localeCompare(
+            b.name,
+          );
+
+        // ─────────────────────────────────────
+        // PRICE HIGH → LOW
+        // ─────────────────────────────────────
+
+        case "price-high":
+          if (
+            a.lowestPrice !==
+            b.lowestPrice
+          ) {
+            return (
+              b.lowestPrice -
+              a.lowestPrice
+            );
+          }
+
+          return a.name.localeCompare(
+            b.name,
+          );
+
+        // ─────────────────────────────────────
+        // NEWEST
+        // ─────────────────────────────────────
+
+        case "newest":
+          return (
+            (b.releaseDate?.getTime() ??
+              b.createdAt.getTime()) -
+            (a.releaseDate?.getTime() ??
+              a.createdAt.getTime())
+          );
+
+        // ─────────────────────────────────────
+        // OLDEST
+        // ─────────────────────────────────────
+
+        case "oldest":
+          return (
+            (a.releaseDate?.getTime() ??
+              a.createdAt.getTime()) -
+            (b.releaseDate?.getTime() ??
+              b.createdAt.getTime())
+          );
+
+        // ─────────────────────────────────────
+        // NAME A → Z
+        // ─────────────────────────────────────
+
+        case "name_asc":
+          return a.name.localeCompare(
+            b.name,
+          );
+
+        // ─────────────────────────────────────
+        // NAME Z → A
+        // ─────────────────────────────────────
+
+        case "name_desc":
+          return b.name.localeCompare(
+            a.name,
+          );
+
+        // ─────────────────────────────────────
+        // RELEVANCE / DEFAULT
+        // ─────────────────────────────────────
+
+        case "relevance":
+        default:
+          return (
+            b.createdAt.getTime() -
+            a.createdAt.getTime()
+          );
+      }
+    })
+    .map((product) => product.id);
+
+  // ─────────────────────────────────────────────
+  // PAGINATE AFTER SORTING
+  // ─────────────────────────────────────────────
+
+ console.log(
+  "SORT RESULT:",
+  normalizedSort,
+  sortableProducts
+    .map((product) => {
+      const prices = product.prices
+        .map((price) => Number(price.amount))
+        .filter((price) => Number.isFinite(price));
+
+      const lowestPrice =
+        prices.length > 0
+          ? Math.min(...prices)
+          : null;
+
+      return {
+        name: product.name,
+        price: lowestPrice,
+        releaseDate: product.releaseDate,
+        createdAt: product.createdAt,
+      };
+    })
+    .sort((a, b) => {
+      if (
+        normalizedSort === "price-low" ||
+        normalizedSort === "price-high"
+      ) {
+        if (a.price === null) return 1;
+        if (b.price === null) return -1;
+
+        return normalizedSort === "price-low"
+          ? a.price - b.price
+          : b.price - a.price;
+      }
+
+      return 0;
+    })
+    .slice(0, 10),
+);
+
+  const paginatedIds = sortedIds.slice(
+    skip,
+    skip + limit,
+  );
+
+  if (paginatedIds.length === 0) {
+    products = [];
+  } else {
+    // ───────────────────────────────────────────
+    // FETCH ONLY THE CURRENT PAGE
+    // ───────────────────────────────────────────
+
+    const fetchedProducts =
+      await prisma.product.findMany({
+        where: {
+          id: {
+            in: paginatedIds,
+          },
+        },
+
+        include: {
+          brand: true,
+          category: true,
+
+          reviews: {
+            where: {
+              isPublished: true,
+            },
+            select: {
+              rating: true,
+            },
+          },
+
+          images: {
+            orderBy: {
+              sortOrder: "asc",
+            },
+          },
+
+          variants: true,
+
+          prices: {
+            where: {
+              inStock: true,
+            },
+            include: {
+              seller: true,
+              variant: true,
+            },
+            orderBy: {
+              amount: "asc",
+            },
+          },
+
+          specifications: {
+            include: {
+              specification: true,
+              value: true,
+            },
+            orderBy: {
+              specification: {
+                name: "asc",
+              },
+            },
+          },
+        },
+      });
+
+    // Restore our calculated sort order.
+    const productMap = new Map(
+      fetchedProducts.map((product) => [
+        product.id,
+        product,
+      ]),
+    );
+
+    products = paginatedIds
+      .map((id) => productMap.get(id))
+      .filter(
+        (
+          product,
+        ): product is NonNullable<
+          typeof product
+        > => Boolean(product),
+      );
+  }
 }
 
   // ─────────────────────────────────────────────

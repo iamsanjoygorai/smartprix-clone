@@ -4,8 +4,11 @@ export const getAdminProducts = async () => {
   return prisma.product.findMany({
     include: {
       brand: true,
+
       category: true,
+
       images: true,
+
       prices: {
         include: {
           seller: true,
@@ -15,7 +18,26 @@ export const getAdminProducts = async () => {
           amount: "asc",
         },
       },
+
+      specifications: {
+        include: {
+          specification: true,
+          value: true,
+        },
+      },
+
+      reviews: {
+        where: {
+          isPublished: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      },
+
+      variants: true,
     },
+
     orderBy: {
       createdAt: "desc",
     },
