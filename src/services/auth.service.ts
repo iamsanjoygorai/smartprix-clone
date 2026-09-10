@@ -185,100 +185,135 @@ export const loginUser = async (input: LoginInput) => {
    REGISTER
 ========================================================= */
 
+/* =========================================================
+   REGISTER
+========================================================= */
+
 export const registerUser = async (
   input: RegisterInput,
 ) => {
   const email = input.email
-    .trim()
-    .toLowerCase();
+    ? input.email.trim().toLowerCase()
+    : undefined;
 
-  const mobile = input.mobile.replace(/\D/g, "");
+  const mobile = input.mobile
+    ? input.mobile.replace(/\D/g, "")
+    : undefined;
 
   /* -------------------------------------------------------
-     DUPLICATE EMAIL / MOBILE
+     SAFETY CHECK
   ------------------------------------------------------- */
 
-  const existingUser =
-    await prisma.user.findFirst({
-      where: {
-        OR: [
-          {
-            email,
-          },
-          {
-            mobile,
-          },
-        ],
-      },
-      select: {
-        email: true,
-        mobile: true,
-      },
-    });
-
-  if (existingUser?.email === email) {
+  if (!email && !mobile) {
     throw new Error(
-      "Email already registered",
+      "Email address or mobile number is required",
     );
   }
 
-  if (existingUser?.mobile === mobile) {
-    throw new Error(
-      "Mobile number already registered",
-    );
+  /* -------------------------------------------------------
+     DUPLICATE EMAIL
+  ------------------------------------------------------- */
+
+  if (email) {
+    const existingEmail =
+      await prisma.user.findUnique({
+        where: {
+          email,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+    if (existingEmail) {
+      throw new Error(
+        "Email already registered",
+      );
+    }
+  }
+
+  /* -------------------------------------------------------
+     DUPLICATE MOBILE
+  ------------------------------------------------------- */
+
+  if (mobile) {
+    const existingMobile =
+      await prisma.user.findUnique({
+        where: {
+          mobile,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+    if (existingMobile) {
+      throw new Error(
+        "Mobile number already registered",
+      );
+    }
   }
 
   /* -------------------------------------------------------
      PASSWORD HASH
   ------------------------------------------------------- */
 
-  const passwordHash = await bcrypt.hash(
-    input.password,
-    12,
-  );
+  const passwordHash =
+    await bcrypt.hash(
+      input.password,
+      12,
+    );
 
   /* -------------------------------------------------------
      CREATE USER
   ------------------------------------------------------- */
 
-  const user = await prisma.user.create({
-    data: {
-      name: input.name.trim(),
+  const user =
+    await prisma.user.create({
+      data: {
+        name: input.name.trim(),
 
-      email,
+        email,
 
-      mobile,
+        mobile,
 
-      passwordHash,
+        passwordHash,
 
-      /*
-       * Public registration can ONLY create USER accounts.
-       *
-       * Never accept role from the frontend.
-       */
-      role: "USER",
+        /*
+         * Public registration can ONLY create
+         * normal USER accounts.
+         *
+         * Never accept role from frontend.
+         */
+        role: "USER",
 
-      isDisabled: false,
+        isDisabled: false,
 
-      /*
-       * DOB and gender are now actually persisted.
-       */
-      dateOfBirth: new Date(
-        `${input.dateOfBirth}T00:00:00`,
-      ),
+        /*
+         * DOB
+         */
+        dateOfBirth: input.dateOfBirth
+          ? new Date(
+              `${input.dateOfBirth}T00:00:00`,
+            )
+          : null,
 
-      gender: input.gender,
-    },
-  });
+        /*
+         * Gender
+         */
+        gender: input.gender || null,
+      },
+    });
 
   /* -------------------------------------------------------
      AUTO LOGIN
   ------------------------------------------------------- */
 
-  const token = generateToken({
-    userId: user.id,
-    role: user.role,
-  });
+  const token =
+    generateToken({
+      userId: user.id,
+      role: user.role,
+    });
 
   /* -------------------------------------------------------
      RESPONSE
