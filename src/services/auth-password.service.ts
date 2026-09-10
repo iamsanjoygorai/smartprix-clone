@@ -3,6 +3,7 @@ import crypto from "crypto";
 
 import prisma from "../db/prisma";
 import { sendPasswordResetCodeEmail } from "./email.service";
+import { loginUser } from "./auth.service";
 
 export const NO_ACCOUNT_ERROR =
   "No account found. Check your mobile number or email address and try again.";
@@ -371,6 +372,23 @@ export const resendPasswordResetCode = async (
     identifier,
   );
 };
+
+export const verifyPasswordForRecovery = async (
+  identifier: string,
+  password: string,
+) => {
+  try {
+    return await loginUser({
+      identifier,
+      password,
+    });
+  } catch (error) {
+    throw new Error(
+      "Incorrect password. Please try again.",
+    );
+  }
+};
+
 
 /**
  * STEP 5

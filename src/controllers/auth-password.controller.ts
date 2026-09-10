@@ -5,6 +5,7 @@ import {
   sendPasswordResetCode,
   verifyPasswordResetCode,
   resendPasswordResetCode,
+  verifyPasswordForRecovery,
   resetPassword,
   NO_ACCOUNT_ERROR,
   INVALID_CODE_ERROR,
@@ -379,6 +380,60 @@ export const resetUserPassword = async (
       success: false,
       message:
         "Unable to reset password",
+    });
+  }
+};
+
+
+export const verifyRecoveryPassword = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const { identifier, password } = req.body;
+
+    if (
+      typeof identifier !== "string" ||
+      !identifier.trim()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Mobile number or email address is required",
+      });
+    }
+
+    if (
+      typeof password !== "string" ||
+      !password
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Password is required",
+      });
+    }
+
+    const data =
+      await verifyPasswordForRecovery(
+        identifier.trim(),
+        password,
+      );
+
+    return res.status(200).json({
+      success: true,
+      message: "Password verified successfully",
+      data,
+    });
+  } catch (error) {
+    console.error(
+      "Recovery password verification error:",
+      error,
+    );
+
+    return res.status(401).json({
+      success: false,
+      message:
+        "Incorrect password. Please try again.",
     });
   }
 };

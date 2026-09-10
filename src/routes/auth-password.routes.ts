@@ -6,6 +6,7 @@ import {
   verifyCode,
   resendVerificationCode,
   resetUserPassword,
+  verifyRecoveryPassword,
 } from "../controllers/auth-password.controller";
 
 const router = Router();
@@ -39,5 +40,11 @@ router.post(
   "/reset-password",
   resetUserPassword,
 );
+
+router.post(
+  "/password-reset/verify-password",
+  verifyRecoveryPassword,
+);
+
 
 export default router;
