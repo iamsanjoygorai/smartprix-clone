@@ -9,7 +9,13 @@ export const registerSchema = z.object({
   email: z
     .string()
     .trim()
-    .email("Valid email is required"),
+    .email("Valid email is required")
+    .transform((value) => value.toLowerCase()),
+
+  mobile: z
+    .string()
+    .trim()
+    .regex(/^\d{10}$/, "Valid 10-digit mobile number is required"),
 
   password: z
     .string()

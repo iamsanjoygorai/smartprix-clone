@@ -30,6 +30,10 @@ import reviewRoutes from "./review.routes";
 import adminCategoryRoutes from "./admin-category.routes";
 import adminBrandRoutes from "./admin-brand.routes";
 import adminSpecificationRoutes from "./admin-specification.routes";
+import searchRoutes from "./search.routes";
+import userRoutes from "./user.routes";
+import favoriteRoutes from "./favorite.routes";
+
 
 const router = Router();
 
@@ -40,6 +44,15 @@ const router = Router();
 router.use("/auth", authRoutes);
 
 router.use("/auth", authPasswordRoutes);
+
+// ==============================
+// User Account
+// ==============================
+
+router.use("/user", userRoutes);
+
+router.use("/favorites", favoriteRoutes);
+
 
 // ==============================
 // Health
@@ -57,6 +70,13 @@ router.get("/health", (_req, res) => {
 // ==============================
 
 router.use("/products", productRoutes);
+
+
+// ==============================
+// Public Search Suggestions
+// ==============================
+
+router.use("/search", searchRoutes);
 
 // ==============================
 // Public Comparisons

@@ -1,27 +1,42 @@
 import { Request, Response } from "express";
 
 import { loginSchema } from "../validators/auth.validator";
-import { loginUser, registerUser } from "../services/auth.service";
+
+import {
+  loginUser,
+  registerUser,
+} from "../services/auth.service";
+
 import { registerSchema } from "../validators/register.validator";
+
 import prisma from "../db/prisma";
+
+/* =========================================================
+   LOGIN
+========================================================= */
 
 export const login = async (
   req: Request,
   res: Response,
 ) => {
   try {
-    const result = loginSchema.safeParse(req.body);
+    const result = loginSchema.safeParse(
+      req.body,
+    );
 
     if (!result.success) {
       res.status(400).json({
         success: false,
         message: "Invalid login data",
-        errors: result.error.flatten().fieldErrors,
+        errors:
+          result.error.flatten().fieldErrors,
       });
       return;
     }
 
-    const data = await loginUser(result.data);
+    const data = await loginUser(
+      result.data,
+    );
 
     res.status(200).json({
       success: true,
@@ -29,65 +44,92 @@ export const login = async (
       data,
     });
   } catch (error) {
-  console.error("Login failed:", error);
+    console.error(
+      "Login failed:",
+      error,
+    );
 
-  const message =
-    error instanceof Error
-      ? error.message
-      : "Login failed";
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Login failed";
 
-  console.log("LOGIN ERROR MESSAGE:", message);
-
-  if (
-    message === "Invalid email or password" ||
-    message === "Account is disabled"
-  ) {
-    res.status(401).json({
-      success: false,
+    console.log(
+      "LOGIN ERROR MESSAGE:",
       message,
-    });
-    return;
-  }
+    );
 
-  res.status(500).json({
-    success: false,
-    message: "Login failed",
-  });
-}
+    if (
+      message ===
+        "Invalid email or password" ||
+      message === "Account is disabled"
+    ) {
+      res.status(401).json({
+        success: false,
+        message,
+      });
+      return;
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Login failed",
+    });
+  }
 };
+
+/* =========================================================
+   REGISTER
+========================================================= */
 
 export const register = async (
   req: Request,
   res: Response,
 ) => {
   try {
-    const result = registerSchema.safeParse(req.body);
+    const result =
+      registerSchema.safeParse(
+        req.body,
+      );
 
     if (!result.success) {
       res.status(400).json({
         success: false,
-        message: "Invalid registration data",
-        errors: result.error.flatten().fieldErrors,
+        message:
+          "Invalid registration data",
+        errors:
+          result.error.flatten().fieldErrors,
       });
       return;
     }
 
-    const data = await registerUser(result.data);
+    const data = await registerUser(
+      result.data,
+    );
 
     res.status(201).json({
       success: true,
-      message: "Registration successful",
+      message:
+        "Registration successful",
       data,
     });
   } catch (error) {
-    console.error("Registration failed:", error);
+    console.error(
+      "Registration failed:",
+      error,
+    );
 
     const message =
       error instanceof Error
         ? error.message
         : "Registration failed";
 
-    if (message === "Email already registered") {
+    if (
+      message ===
+        "Email already registered" ||
+      message ===
+        "Mobile number already registered"
+    ) {
       res.status(409).json({
         success: false,
         message,
@@ -97,21 +139,33 @@ export const register = async (
 
     res.status(500).json({
       success: false,
-      message: "Registration failed",
+      message:
+        "Registration failed",
     });
   }
 };
 
+/* =========================================================
+   GET CURRENT USER
+========================================================= */
 
 export const getMe = async (
   req: Request,
   res: Response,
 ) => {
   try {
-    if (!req.user || typeof req.user === "string") {
+    /*
+     * Authentication middleware should attach
+     * the decoded JWT payload to req.user.
+     */
+    if (
+      !req.user ||
+      typeof req.user === "string"
+    ) {
       res.status(401).json({
         success: false,
-        message: "Authentication required",
+        message:
+          "Authentication required",
       });
       return;
     }
@@ -121,36 +175,44 @@ export const getMe = async (
     if (!userId) {
       res.status(401).json({
         success: false,
-        message: "Invalid authentication token",
+        message:
+          "Invalid authentication token",
       });
       return;
     }
 
-    const user = await prisma.user.findUnique({
-      where: {
-        id: userId,
-      },
-      include: {
-        userRoles: {
-          include: {
-            role: {
-              include: {
-                permissions: {
-                  include: {
-                    permission: true,
+    /* -------------------------------------------------------
+       FETCH USER
+    ------------------------------------------------------- */
+
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
+
+        include: {
+          userRoles: {
+            include: {
+              role: {
+                include: {
+                  permissions: {
+                    include: {
+                      permission: true,
+                    },
                   },
                 },
               },
             },
           },
-        },
-        userPermissions: {
-          include: {
-            permission: true,
+
+          userPermissions: {
+            include: {
+              permission: true,
+            },
           },
         },
-      },
-    });
+      });
 
     if (!user) {
       res.status(404).json({
@@ -160,26 +222,42 @@ export const getMe = async (
       return;
     }
 
+    /* -------------------------------------------------------
+       DISABLED ACCOUNT
+    ------------------------------------------------------- */
+
     if (user.isDisabled) {
       res.status(401).json({
         success: false,
-        message: "Account is disabled",
+        message:
+          "Account is disabled",
       });
       return;
     }
 
-    // Start with role permissions
-    const effectivePermissions = new Set<string>(
-      user.userRoles.flatMap((userRole) =>
-        userRole.role.permissions.map(
-          (rolePermission) =>
-            rolePermission.permission.name,
-        ),
-      ),
-    );
+    /* -------------------------------------------------------
+       ROLE PERMISSIONS
+    ------------------------------------------------------- */
 
-    // SUPER_ADMIN gets every permission
-    if (user.role === "SUPER_ADMIN") {
+    const effectivePermissions =
+      new Set<string>(
+        user.userRoles.flatMap(
+          (userRole) =>
+            userRole.role.permissions.map(
+              (rolePermission) =>
+                rolePermission.permission
+                  .name,
+            ),
+        ),
+      );
+
+    /* -------------------------------------------------------
+       SUPER ADMIN
+    ------------------------------------------------------- */
+
+    if (
+      user.role === "SUPER_ADMIN"
+    ) {
       const allPermissions =
         await prisma.permission.findMany({
           select: {
@@ -188,11 +266,17 @@ export const getMe = async (
         });
 
       for (const permission of allPermissions) {
-        effectivePermissions.add(permission.name);
+        effectivePermissions.add(
+          permission.name,
+        );
       }
     } else {
-      // Apply individual user overrides
-      for (const override of user.userPermissions) {
+      /* -----------------------------------------------------
+         INDIVIDUAL PERMISSION OVERRIDES
+      ----------------------------------------------------- */
+
+      for (const override of
+        user.userPermissions) {
         if (override.allowed) {
           effectivePermissions.add(
             override.permission.name,
@@ -205,17 +289,42 @@ export const getMe = async (
       }
     }
 
+    /* -------------------------------------------------------
+       RESPONSE
+    ------------------------------------------------------- */
+
     res.status(200).json({
       success: true,
+
       data: {
         id: user.id,
-        email: user.email,
+
         name: user.name,
+
+        email: user.email,
+
+        mobile: user.mobile,
+
+        dateOfBirth:
+          user.dateOfBirth,
+
+        gender: user.gender,
+
         role: user.role,
-        createdAt: user.createdAt,
-        permissions: Array.from(
-          effectivePermissions,
-        ),
+
+        isDisabled:
+          user.isDisabled,
+
+        createdAt:
+          user.createdAt,
+
+        updatedAt:
+          user.updatedAt,
+
+        permissions:
+          Array.from(
+            effectivePermissions,
+          ),
       },
     });
   } catch (error) {
@@ -226,7 +335,8 @@ export const getMe = async (
 
     res.status(500).json({
       success: false,
-      message: "Failed to fetch current user",
+      message:
+        "Failed to fetch current user",
     });
   }
 };

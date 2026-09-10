@@ -1,6 +1,7 @@
 import prisma from "../db/prisma";
 import { Prisma } from "@prisma/client";
 
+
 // ─────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────
@@ -2568,52 +2569,172 @@ if (
 
 
 export const getProductBySlug = async (slug: string) => {
-return prisma.product.findUnique({
-where: {
-slug,
-},
-include: {
-brand: true,
-category: true,
-images: {
-orderBy: {
-sortOrder: "asc",
-},
-},
-variants: {
-include: {
-prices: {
-include: {
-seller: true,
-},
-orderBy: {
-amount: "asc",
-},
-},
-},
-},
-prices: {
-include: {
-seller: true,
-variant: true,
-},
-orderBy: {
-amount: "asc",
-},
-},
-specifications: {
-include: {
-specification: true,
-value: true,
-},
-orderBy: {
-specification: {
-name: "asc",
-},
-},
-},
-},
-});
+  const product = await prisma.product.findUnique({
+    where: {
+      slug,
+    },
+
+    include: {
+      brand: true,
+
+      category: true,
+
+      images: {
+        orderBy: {
+          sortOrder: "asc",
+        },
+      },
+
+      variants: {
+        include: {
+          prices: {
+            include: {
+              seller: true,
+            },
+            orderBy: {
+              amount: "asc",
+            },
+          },
+        },
+      },
+
+      prices: {
+        include: {
+          seller: true,
+          variant: true,
+        },
+        orderBy: {
+          amount: "asc",
+        },
+      },
+
+      specifications: {
+        include: {
+          specification: true,
+          value: true,
+        },
+
+        orderBy: [
+          {
+            specification: {
+              column: "asc",
+            },
+          },
+          {
+            specification: {
+              groupOrder: "asc",
+            },
+          },
+          {
+            specification: {
+              sortOrder: "asc",
+            },
+          },
+          {
+            specification: {
+              name: "asc",
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  if (!product) {
+    return null;
+  }
+
+  // ─────────────────────────────────────────────
+  // NORMALIZE SPECIFICATIONS
+  // ─────────────────────────────────────────────
+
+  const specifications = product.specifications
+    .map((item) => {
+      const specification = item.specification;
+
+      // customValue takes priority over SpecificationValue
+      const value =
+        item.customValue?.trim() ||
+        item.value?.value?.trim() ||
+        null;
+
+      return {
+        id: specification.id,
+        name: specification.name,
+        slug: specification.slug,
+
+        value,
+
+        unit: specification.unit,
+        dataType: specification.dataType,
+
+        group: specification.group,
+        column: specification.column,
+
+        groupOrder: specification.groupOrder,
+        sortOrder: specification.sortOrder,
+      };
+    })
+    .filter((item) => item.value !== null);
+
+  // ─────────────────────────────────────────────
+  // GROUP SPECIFICATIONS
+  // ─────────────────────────────────────────────
+
+  const specificationGroups = specifications.reduce<
+    Record<
+      string,
+      {
+        group: string;
+        column: string;
+        groupOrder: number;
+        specifications: typeof specifications;
+      }
+    >
+  >((groups, specification) => {
+    const key = specification.group;
+
+    if (!groups[key]) {
+      groups[key] = {
+        group: specification.group,
+        column: specification.column,
+        groupOrder: specification.groupOrder,
+        specifications: [],
+      };
+    }
+
+    groups[key].specifications.push(specification);
+
+    return groups;
+  }, {});
+
+  // Sort specifications inside each group
+  Object.values(specificationGroups).forEach((group) => {
+    group.specifications.sort(
+      (a, b) => a.sortOrder - b.sortOrder,
+    );
+  });
+
+  // Sort groups
+  const sortedSpecificationGroups = Object.values(
+    specificationGroups,
+  ).sort((a, b) => {
+    if (a.column !== b.column) {
+      return a.column === "LEFT" ? -1 : 1;
+    }
+
+    return a.groupOrder - b.groupOrder;
+  });
+
+  return {
+    ...product,
+
+    // Flat normalized specification list
+    specifications,
+
+    // Ready-to-render grouped specifications
+    specificationGroups: sortedSpecificationGroups,
+  };
 };
 
 export const getProductPrices = async (productId: string) => {
@@ -2650,20 +2771,68 @@ recordedAt: "desc",
 };
 
 export const getProductSpecifications = async (
-productId: string,
+  productId: string,
 ) => {
-return prisma.productSpecification.findMany({
-where: {
-productId,
-},
-include: {
-specification: true,
-value: true,
-},
-orderBy: {
-specification: {
-name: "asc",
-},
-},
-});
+  const productSpecifications =
+    await prisma.productSpecification.findMany({
+      where: {
+        productId,
+      },
+
+      include: {
+        specification: true,
+        value: true,
+      },
+
+      orderBy: [
+        {
+          specification: {
+            column: "asc",
+          },
+        },
+        {
+          specification: {
+            groupOrder: "asc",
+          },
+        },
+        {
+          specification: {
+            sortOrder: "asc",
+          },
+        },
+        {
+          specification: {
+            name: "asc",
+          },
+        },
+      ],
+    });
+
+  return productSpecifications
+    .map((item) => {
+      const specification = item.specification;
+
+      const value =
+        item.customValue?.trim() ||
+        item.value?.value?.trim() ||
+        null;
+
+      return {
+        id: specification.id,
+        name: specification.name,
+        slug: specification.slug,
+
+        value,
+
+        unit: specification.unit,
+        dataType: specification.dataType,
+
+        group: specification.group,
+        column: specification.column,
+
+        groupOrder: specification.groupOrder,
+        sortOrder: specification.sortOrder,
+      };
+    })
+    .filter((item) => item.value !== null);
 };

@@ -1,53 +1,307 @@
 import { Request, Response } from "express";
+
 import {
-  requestPasswordReset,
+  findPasswordRecoveryAccount,
+  sendPasswordResetCode,
+  verifyPasswordResetCode,
+  resendPasswordResetCode,
   resetPassword,
+  NO_ACCOUNT_ERROR,
+  INVALID_CODE_ERROR,
+  EXPIRED_CODE_ERROR,
+  TOO_MANY_ATTEMPTS_ERROR,
+  RESEND_COOLDOWN_ERROR,
+  RESET_SESSION_ERROR,
 } from "../services/auth-password.service";
-import { env } from "../config/env";
 
 export const forgotPassword = async (
   req: Request,
   res: Response,
 ) => {
   try {
-    const { email } = req.body;
+    const {
+      identifier,
+      email,
+    } = req.body;
 
-    if (
-      typeof email !== "string" ||
-      !email.trim()
-    ) {
+    const value =
+      typeof identifier === "string"
+        ? identifier
+        : typeof email === "string"
+          ? email
+          : "";
+
+    if (!value.trim()) {
       return res.status(400).json({
         success: false,
-        message: "Email is required",
+        message:
+          "Please enter your mobile number or email address.",
       });
     }
 
-    await requestPasswordReset(
-      email,
-      env.CLIENT_URL,
-    );
+    const account =
+      await findPasswordRecoveryAccount(
+        value,
+      );
 
-    /*
-     * Deliberately generic response.
-     */
     return res.status(200).json({
       success: true,
-      message:
-        "If an account exists with this email, a password reset link has been sent.",
+      message: "Account found",
+      data: {
+        userId: account.userId,
+        maskedEmail: account.maskedEmail,
+        maskedMobile: account.maskedMobile,
+        recoveryMethods:
+          account.recoveryMethods,
+      },
     });
   } catch (error) {
     console.error(
-      "Forgot password error:",
+      "Find password recovery account error:",
       error,
     );
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unable to find account";
+
+    if (
+      message === NO_ACCOUNT_ERROR
+    ) {
+      return res.status(404).json({
+        success: false,
+        message: NO_ACCOUNT_ERROR,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to find account",
+    });
+  }
+};
+
+export const sendVerificationCode = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const {
+      identifier,
+    } = req.body;
+
+    if (
+      typeof identifier !== "string" ||
+      !identifier.trim()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Mobile number or email address is required",
+      });
+    }
+
+    const result =
+      await sendPasswordResetCode(
+        identifier,
+      );
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Verification code sent",
+      data: result,
+    });
+  } catch (error) {
+    console.error(
+      "Send password reset code error:",
+      error,
+    );
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unable to send verification code";
+
+    if (
+      message === NO_ACCOUNT_ERROR
+    ) {
+      return res.status(404).json({
+        success: false,
+        message: NO_ACCOUNT_ERROR,
+      });
+    }
+
+    if (
+      message === RESEND_COOLDOWN_ERROR
+    ) {
+      return res.status(429).json({
+        success: false,
+        message,
+      });
+    }
 
     return res.status(500).json({
       success: false,
       message:
-        "Unable to process password reset request",
+        "Unable to send verification code",
     });
   }
 };
+
+export const verifyCode = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const {
+      identifier,
+      code,
+    } = req.body;
+
+    if (
+      typeof identifier !== "string" ||
+      !identifier.trim()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Mobile number or email address is required",
+      });
+    }
+
+    if (
+      typeof code !== "string" ||
+      !/^\d{6}$/.test(code.trim())
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Enter the 6-digit verification code",
+      });
+    }
+
+    const result =
+      await verifyPasswordResetCode(
+        identifier,
+        code,
+      );
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Verification successful",
+      data: result,
+    });
+  } catch (error) {
+    console.error(
+      "Verify password reset code error:",
+      error,
+    );
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unable to verify code";
+
+    if (
+      message === INVALID_CODE_ERROR ||
+      message === EXPIRED_CODE_ERROR ||
+      message === TOO_MANY_ATTEMPTS_ERROR
+    ) {
+      return res.status(400).json({
+        success: false,
+        message,
+      });
+    }
+
+    if (
+      message === NO_ACCOUNT_ERROR
+    ) {
+      return res.status(404).json({
+        success: false,
+        message: NO_ACCOUNT_ERROR,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Unable to verify verification code",
+    });
+  }
+};
+
+export const resendVerificationCode =
+  async (
+    req: Request,
+    res: Response,
+  ) => {
+    try {
+      const {
+        identifier,
+      } = req.body;
+
+      if (
+        typeof identifier !== "string" ||
+        !identifier.trim()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Mobile number or email address is required",
+        });
+      }
+
+      const result =
+        await resendPasswordResetCode(
+          identifier,
+        );
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "A new verification code has been sent",
+        data: result,
+      });
+    } catch (error) {
+      console.error(
+        "Resend password reset code error:",
+        error,
+      );
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to resend verification code";
+
+      if (
+        message ===
+        RESEND_COOLDOWN_ERROR
+      ) {
+        return res.status(429).json({
+          success: false,
+          message,
+        });
+      }
+
+      if (
+        message === NO_ACCOUNT_ERROR
+      ) {
+        return res.status(404).json({
+          success: false,
+          message: NO_ACCOUNT_ERROR,
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "Unable to resend verification code",
+      });
+    }
+  };
 
 export const resetUserPassword = async (
   req: Request,
@@ -65,7 +319,8 @@ export const resetUserPassword = async (
     ) {
       return res.status(400).json({
         success: false,
-        message: "Reset token is required",
+        message:
+          "Password reset session is required",
       });
     }
 
@@ -75,7 +330,8 @@ export const resetUserPassword = async (
     ) {
       return res.status(400).json({
         success: false,
-        message: "New password is required",
+        message:
+          "New password is required",
       });
     }
 
@@ -109,8 +365,7 @@ export const resetUserPassword = async (
         : "Unable to reset password";
 
     if (
-      message ===
-        "Password reset link is invalid or expired" ||
+      message === RESET_SESSION_ERROR ||
       message ===
         "New password must be different from your current password"
     ) {
@@ -122,7 +377,8 @@ export const resetUserPassword = async (
 
     return res.status(500).json({
       success: false,
-      message: "Unable to reset password",
+      message:
+        "Unable to reset password",
     });
   }
 };

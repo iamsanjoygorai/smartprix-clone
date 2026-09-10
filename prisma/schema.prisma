@@ -12,15 +12,24 @@ datasource db {
 // ─────────────────────────────────────────────
 
 model User {
-  id           String  @id @default(cuid())
-  email        String  @unique
+  id           String   @id @default(cuid())
+  email        String   @unique
+  mobile       String?  @unique
   name         String?
   passwordHash String?
-  role         String  @default("USER")
-  isDisabled   Boolean @default(false)
+  role         String   @default("USER")
+  isDisabled   Boolean  @default(false)
 
-  resetPasswordTokenHash String?
-  resetPasswordExpiresAt DateTime?
+  dateOfBirth  DateTime?
+  gender       String?
+
+  resetPasswordTokenHash     String?
+  resetPasswordExpiresAt     DateTime?
+
+  passwordResetCodeHash      String?
+  passwordResetCodeExpiresAt DateTime?
+  passwordResetCodeAttempts  Int      @default(0)
+  passwordResetCodeSentAt    DateTime?
 
   reviews     Review[]
   comparisons Comparison[]
@@ -29,7 +38,6 @@ model User {
 
   userRoles UserRole[]
   auditLogs AuditLog[] @relation("AuditActor")
-
   userPermissions UserPermission[]
 
   createdAt DateTime @default(now())
@@ -105,6 +113,20 @@ model AuditLog {
   @@index([targetUserId])
   @@index([action])
   @@index([createdAt])
+}
+
+model SearchQuery {
+  id        String   @id @default(cuid())
+  query     String
+  normalized String
+  count     Int      @default(1)
+  lastSearchedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([normalized])
+  @@index([count])
+  @@index([lastSearchedAt])
 }
 
 // ─────────────────────────────────────────────
@@ -229,19 +251,41 @@ model ProductImage {
 // SPECIFICATIONS
 // ─────────────────────────────────────────────
 
+// ─────────────────────────────────────────────
+// SPECIFICATIONS
+// ─────────────────────────────────────────────
+
 model Specification {
-  id       String  @id @default(cuid())
-  name     String
-  slug     String  @unique
+  id   String @id @default(cuid())
+  name String
+  slug String @unique
+
   unit     String?
   dataType String  @default("text")
-  group    String  @default("General")
+
+  // Full Specs organization
+  // Examples: General, Design, Display, Camera, Battery
+  group String @default("General")
+
+  // LEFT / RIGHT column on Full Specs page
+  column String @default("LEFT")
+
+  // Controls section ordering
+  groupOrder Int @default(0)
+
+  // Controls specification ordering inside a group
+  sortOrder Int @default(0)
 
   values   SpecificationValue[]
   products ProductSpecification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([group])
+  @@index([column])
+  @@index([groupOrder])
+  @@index([sortOrder])
 }
 
 model SpecificationValue {

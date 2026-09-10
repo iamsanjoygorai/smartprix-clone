@@ -153,11 +153,19 @@ export const getSpecifications = async (
       return;
     }
 
-    const specifications = await getProductSpecifications(slug);
+    const product = await getProductBySlug(slug);
+
+    if (!product) {
+      res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+      return;
+    }
 
     res.status(200).json({
       success: true,
-      data: specifications,
+      data: product.specifications,
     });
   } catch (error) {
     console.error("Failed to fetch product specifications:", error);
