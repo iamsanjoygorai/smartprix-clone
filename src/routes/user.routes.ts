@@ -4,6 +4,7 @@ import {
   getProfile,
   updateProfile,
   changePassword,
+  deleteAccount,
   uploadProfileImage,
   deleteProfileImage,
 } from "../controllers/user.controller";
@@ -35,6 +36,11 @@ router.put(
 router.put(
   "/password",
   changePassword,
+);
+
+router.delete(
+  "/account",
+  deleteAccount,
 );
 
 /* =========================================================

@@ -365,6 +365,7 @@ export const getMe = async (
         email: user.email,
 
         mobile: user.mobile,
+        profileImageUrl: user.profileImageUrl,
 
         dateOfBirth:
           user.dateOfBirth,

@@ -704,6 +704,210 @@ export const deleteProfileImage = async (
 };
 
 /* =========================================================
+   PERMANENTLY DELETE CURRENT USER ACCOUNT
+========================================================= */
+
+export const deleteAccount = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    /* -------------------------------------------------------
+       AUTHENTICATION
+    ------------------------------------------------------- */
+
+    if (!req.user || typeof req.user === "string") {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+      return;
+    }
+
+    const userId = req.user.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Invalid authentication token",
+      });
+      return;
+    }
+
+    /* -------------------------------------------------------
+       GET CURRENT USER
+    ------------------------------------------------------- */
+
+    const user = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        id: true,
+        passwordHash: true,
+        isDisabled: true,
+        profileImageUrl: true,
+      },
+    });
+
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+      return;
+    }
+
+    /* -------------------------------------------------------
+       CHECK ACCOUNT STATUS
+    ------------------------------------------------------- */
+
+    if (user.isDisabled) {
+      res.status(403).json({
+        success: false,
+        message: "Account is disabled",
+      });
+      return;
+    }
+
+    /* -------------------------------------------------------
+       PASSWORD REQUIRED
+    ------------------------------------------------------- */
+
+    const { currentPassword } = req.body ?? {};
+
+    if (
+      typeof currentPassword !== "string" ||
+      !currentPassword.trim()
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Current password is required",
+      });
+      return;
+    }
+
+    if (!user.passwordHash) {
+      res.status(400).json({
+        success: false,
+        message:
+          "Account deletion is not available because this account does not have a password",
+      });
+      return;
+    }
+
+    /* -------------------------------------------------------
+       VERIFY PASSWORD
+    ------------------------------------------------------- */
+
+    const passwordMatches = await bcrypt.compare(
+      currentPassword,
+      user.passwordHash,
+    );
+
+    if (!passwordMatches) {
+      res.status(400).json({
+        success: false,
+        message: "Current password is incorrect",
+      });
+      return;
+    }
+
+    /* -------------------------------------------------------
+       DELETE PROFILE IMAGE FILE
+       
+       Do this before deleting the database record so we
+       still have access to the image URL.
+    ------------------------------------------------------- */
+
+    if (
+      user.profileImageUrl &&
+      user.profileImageUrl.includes(
+        "/uploads/profile/",
+      )
+    ) {
+      try {
+        const imageUrl = new URL(
+          user.profileImageUrl,
+        );
+
+        const imagePath = path.join(
+          process.cwd(),
+          imageUrl.pathname.replace(/^\/+/, ""),
+        );
+
+        if (fs.existsSync(imagePath)) {
+          await fs.promises.unlink(imagePath);
+        }
+      } catch (cleanupError) {
+        console.warn(
+          "Failed to delete profile image during account deletion:",
+          cleanupError,
+        );
+      }
+    }
+
+    /* -------------------------------------------------------
+       PERMANENTLY DELETE USER
+       
+       Prisma onDelete: Cascade will remove:
+       - Reviews
+       - Comparisons
+       - Favorites
+       - Price alerts
+       - User roles
+       - User permissions
+
+       AuditLog actor relation uses SetNull, so existing
+       audit records will not prevent account deletion.
+    ------------------------------------------------------- */
+
+    await prisma.user.delete({
+      where: {
+        id: userId,
+      },
+    });
+
+    /* -------------------------------------------------------
+       RESPONSE
+    ------------------------------------------------------- */
+
+    res.status(200).json({
+      success: true,
+      message: "Account permanently deleted",
+    });
+  } catch (error) {
+    console.error(
+      "Delete account failed:",
+      error,
+    );
+
+    /* -------------------------------------------------------
+       HANDLE FOREIGN KEY / RELATION PROBLEMS
+    ------------------------------------------------------- */
+
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "P2003"
+    ) {
+      res.status(409).json({
+        success: false,
+        message:
+          "This account cannot be deleted because related records still exist",
+      });
+      return;
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete account",
+    });
+  }
+};
+
+/* =========================================================
    CHANGE PASSWORD
 ========================================================= */
 
