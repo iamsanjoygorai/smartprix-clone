@@ -401,3 +401,296 @@ export const getMe = async (
     });
   }
 };
+
+/* =========================================================
+   UPDATE PROFILE
+========================================================= */
+
+export const updateProfile = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    /* -------------------------------------------------------
+       AUTHENTICATION
+    ------------------------------------------------------- */
+
+    if (
+      !req.user ||
+      typeof req.user === "string"
+    ) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+      return;
+    }
+
+    const userId = req.user.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Invalid authentication token",
+      });
+      return;
+    }
+
+    /* -------------------------------------------------------
+       ACCEPT ONLY PROFILE FIELDS
+    ------------------------------------------------------- */
+
+    const {
+      name,
+      mobile,
+      dateOfBirth,
+      gender,
+    } = req.body;
+
+    /* -------------------------------------------------------
+       VALIDATE NAME
+    ------------------------------------------------------- */
+
+    if (
+      name !== undefined &&
+      name !== null &&
+      typeof name !== "string"
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid name",
+      });
+      return;
+    }
+
+    if (
+      typeof name === "string" &&
+      name.trim().length > 100
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Name is too long",
+      });
+      return;
+    }
+
+    /* -------------------------------------------------------
+       VALIDATE MOBILE
+    ------------------------------------------------------- */
+
+    if (
+      mobile !== undefined &&
+      mobile !== null &&
+      typeof mobile !== "string"
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid mobile number",
+      });
+      return;
+    }
+
+    const cleanMobile =
+      typeof mobile === "string"
+        ? mobile.trim()
+        : mobile;
+
+    if (
+      cleanMobile &&
+      !/^[0-9]{10}$/.test(cleanMobile)
+    ) {
+      res.status(400).json({
+        success: false,
+        message:
+          "Mobile number must contain exactly 10 digits",
+      });
+      return;
+    }
+
+    /* -------------------------------------------------------
+       VALIDATE DATE OF BIRTH
+    ------------------------------------------------------- */
+
+    let parsedDateOfBirth:
+      | Date
+      | null
+      | undefined = undefined;
+
+    if (
+      dateOfBirth !== undefined &&
+      dateOfBirth !== null &&
+      dateOfBirth !== ""
+    ) {
+      if (
+        typeof dateOfBirth !== "string"
+      ) {
+        res.status(400).json({
+          success: false,
+          message: "Invalid date of birth",
+        });
+        return;
+      }
+
+      const parsedDate =
+        new Date(dateOfBirth);
+
+      if (
+        Number.isNaN(
+          parsedDate.getTime(),
+        )
+      ) {
+        res.status(400).json({
+          success: false,
+          message: "Invalid date of birth",
+        });
+        return;
+      }
+
+      parsedDateOfBirth = parsedDate;
+    } else if (
+      dateOfBirth === null ||
+      dateOfBirth === ""
+    ) {
+      parsedDateOfBirth = null;
+    }
+
+    /* -------------------------------------------------------
+       VALIDATE GENDER
+    ------------------------------------------------------- */
+
+    if (
+      gender !== undefined &&
+      gender !== null &&
+      typeof gender !== "string"
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid gender",
+      });
+      return;
+    }
+
+    const cleanGender =
+      typeof gender === "string"
+        ? gender.trim()
+        : gender;
+
+    const allowedGenders = [
+      "MALE",
+      "FEMALE",
+      "OTHER",
+      "PREFER_NOT_TO_SAY",
+    ];
+
+    if (
+      cleanGender &&
+      !allowedGenders.includes(
+        cleanGender.toUpperCase(),
+      )
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid gender",
+      });
+      return;
+    }
+
+    /* -------------------------------------------------------
+       CHECK MOBILE DUPLICATE
+    ------------------------------------------------------- */
+
+    if (cleanMobile) {
+      const existingUser =
+        await prisma.user.findFirst({
+          where: {
+            mobile: cleanMobile,
+            NOT: {
+              id: userId,
+            },
+          },
+          select: {
+            id: true,
+          },
+        });
+
+      if (existingUser) {
+        res.status(409).json({
+          success: false,
+          message:
+            "Mobile number already registered",
+        });
+        return;
+      }
+    }
+
+    /* -------------------------------------------------------
+       UPDATE USER
+    ------------------------------------------------------- */
+
+    const user =
+      await prisma.user.update({
+        where: {
+          id: userId,
+        },
+        data: {
+          ...(name !== undefined && {
+            name:
+              typeof name === "string"
+                ? name.trim() || null
+                : null,
+          }),
+
+          ...(mobile !== undefined && {
+            mobile:
+              cleanMobile || null,
+          }),
+
+          ...(parsedDateOfBirth !==
+            undefined && {
+            dateOfBirth:
+              parsedDateOfBirth,
+          }),
+
+          ...(gender !== undefined && {
+            gender:
+              cleanGender
+                ? cleanGender.toUpperCase()
+                : null,
+          }),
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+          dateOfBirth: true,
+          gender: true,
+          role: true,
+          isDisabled: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+    /* -------------------------------------------------------
+       RESPONSE
+    ------------------------------------------------------- */
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      data: user,
+    });
+  } catch (error) {
+    console.error(
+      "Failed to update profile:",
+      error,
+    );
+
+    res.status(500).json({
+      success: false,
+      message:
+        "Failed to update profile",
+    });
+  }
+};
