@@ -20,6 +20,11 @@ import {
 import { requirePermission } from "../middlewares/require-permission";
 import { PERMISSIONS } from "../config/permissions";
 
+import {
+  getAuditLogs,
+  exportAuditLogs,
+} from "../controllers/audit.controller";
+
 const router = Router();
 
 // =========================================================
@@ -106,5 +111,23 @@ router.delete(
   requirePermission(PERMISSIONS.NEWS_DELETE),
   deleteNewsPost,
 );
+
+
+// =========================================================
+// AUDIT LOGS — SUPER_ADMIN ONLY
+// =========================================================
+
+router.get(
+  "/audit-logs/export",
+  requirePermission(PERMISSIONS.AUDIT_VIEW),
+  exportAuditLogs,
+);
+
+router.get(
+  "/audit-logs",
+  requirePermission(PERMISSIONS.AUDIT_VIEW),
+  getAuditLogs,
+);
+
 
 export default router;
