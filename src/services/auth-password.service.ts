@@ -4,6 +4,11 @@ import crypto from "crypto";
 import prisma from "../db/prisma";
 import { sendPasswordResetCodeEmail } from "./email.service";
 import { loginUser } from "./auth.service";
+import { sendPasswordResetCodeSms } from "./sms.service";
+import {
+  sendTwoFactorOtp,
+  verifyTwoFactorOtp,
+} from "./twofactor.service";
 
 export const NO_ACCOUNT_ERROR =
   "No account found. Check your mobile number or email address and try again.";
@@ -68,12 +73,10 @@ function maskMobile(mobile: string | null) {
   const digits = mobile.replace(/\D/g, "");
 
   if (digits.length < 4) {
-    return "****";
+    return "••••";
   }
 
-  return `${"*".repeat(
-    Math.max(digits.length - 4, 4),
-  )}${digits.slice(-4)}`;
+  return `••••${digits.slice(-4)}`;
 }
 
 async function findUserByIdentifier(
@@ -125,23 +128,48 @@ export const findPasswordRecoveryAccount = async (
 ) => {
   const user =
     await findUserByIdentifier(identifier);
+    console.log("PASSWORD RECOVERY USER:", {
+  id: user?.id,
+  hasEmail: !!user?.email,
+  hasMobile: !!user?.mobile,
+  mobileLength: user?.mobile?.length ?? 0,
+});
 
   if (!user || user.isDisabled) {
     throw new Error(NO_ACCOUNT_ERROR);
+  }
+
+  const recoveryMethods = [];
+
+  if (user.email) {
+    recoveryMethods.push({
+      type: "email" as const,
+      label: `Send code to ${maskEmail(
+        user.email,
+      )}`,
+    });
+  }
+
+  if (user.mobile) {
+    recoveryMethods.push({
+      type: "sms" as const,
+      label: `Send code to ${maskMobile(
+        user.mobile,
+      )}`,
+    });
   }
 
   return {
     userId: user.id,
     email: user.email,
     mobile: user.mobile,
-    maskedEmail: maskEmail(user.email),
-    maskedMobile: maskMobile(user.mobile),
-    recoveryMethods: [
-      {
-        type: "email" as const,
-        label: `Send code to ${maskEmail(user.email)}`,
-      },
-    ],
+    maskedEmail: user.email
+      ? maskEmail(user.email)
+      : null,
+    maskedMobile: maskMobile(
+      user.mobile,
+    ),
+    recoveryMethods,
   };
 };
 
@@ -162,66 +190,182 @@ export const sendPasswordResetCode = async (
 
   const now = Date.now();
 
-  if (user.id) {
-    const existingUser =
-      await prisma.user.findUnique({
+  const existingUser =
+    await prisma.user.findUnique({
+      where: {
+        id: user.id,
+      },
+      select: {
+        passwordResetCodeSentAt: true,
+      },
+    });
+
+  if (
+    existingUser?.passwordResetCodeSentAt &&
+    now -
+      existingUser.passwordResetCodeSentAt.getTime() <
+      60 * 1000
+  ) {
+    throw new Error(
+      RESEND_COOLDOWN_ERROR,
+    );
+  }
+
+  /*
+   * EMAIL ACCOUNT
+   *
+   * Keep the existing email OTP system unchanged.
+   */
+  if (user.email) {
+    const code =
+      generateVerificationCode();
+
+    const codeHash =
+      hashToken(code);
+
+    const codeExpiresAt =
+      new Date(
+        now + 10 * 60 * 1000,
+      );
+
+    await prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        passwordResetCodeHash:
+          codeHash,
+
+        passwordResetCodeExpiresAt:
+          codeExpiresAt,
+
+        passwordResetCodeAttempts: 0,
+
+        passwordResetCodeSentAt:
+          new Date(now),
+
+        passwordResetOtpSessionId:
+          null,
+
+        resetPasswordTokenHash:
+          null,
+
+        resetPasswordExpiresAt:
+          null,
+      },
+    });
+
+    await sendPasswordResetCodeEmail(
+      user.email,
+      code,
+    );
+
+    return {
+      deliveryMethod: "email" as const,
+
+      maskedEmail:
+        maskEmail(user.email),
+
+      maskedMobile:
+        maskMobile(user.mobile),
+
+      expiresInSeconds:
+        10 * 60,
+
+      resendAfterSeconds: 60,
+    };
+  }
+
+  /*
+   * MOBILE ACCOUNT
+   *
+   * Use 2Factor AUTOGEN.
+   */
+  if (user.mobile) {
+    try {
+      const result =
+        await sendTwoFactorOtp(
+          user.mobile,
+        );
+
+      await prisma.user.update({
         where: {
           id: user.id,
         },
-        select: {
-          passwordResetCodeSentAt: true,
+        data: {
+          passwordResetCodeHash:
+            null,
+
+          passwordResetCodeExpiresAt:
+            new Date(
+              now + 10 * 60 * 1000,
+            ),
+
+          passwordResetCodeAttempts: 0,
+
+          passwordResetCodeSentAt:
+            new Date(now),
+
+          passwordResetOtpSessionId:
+            result.sessionId,
+
+          resetPasswordTokenHash:
+            null,
+
+          resetPasswordExpiresAt:
+            null,
         },
       });
 
-    if (
-      existingUser?.passwordResetCodeSentAt &&
-      now -
-        existingUser.passwordResetCodeSentAt.getTime() <
-        60 * 1000
-    ) {
+      return {
+        deliveryMethod: "sms" as const,
+
+        maskedEmail: null,
+
+        maskedMobile:
+          maskMobile(user.mobile),
+
+        expiresInSeconds:
+          10 * 60,
+
+        resendAfterSeconds: 60,
+      };
+    } catch (error) {
+      console.error(
+        "2Factor OTP send failed:",
+        error,
+      );
+
+      await prisma.user.update({
+        where: {
+          id: user.id,
+        },
+        data: {
+          passwordResetCodeHash:
+            null,
+
+          passwordResetCodeExpiresAt:
+            null,
+
+          passwordResetCodeAttempts: 0,
+
+          passwordResetCodeSentAt:
+            null,
+
+          passwordResetOtpSessionId:
+            null,
+        },
+      });
+
       throw new Error(
-        RESEND_COOLDOWN_ERROR,
+        "Unable to send verification SMS",
       );
     }
   }
 
-  const code =
-    generateVerificationCode();
-
-  const codeHash = hashToken(code);
-
-  const codeExpiresAt = new Date(
-    now + 10 * 60 * 1000,
+  throw new Error(
+    NO_ACCOUNT_ERROR,
   );
-
-  await prisma.user.update({
-    where: {
-      id: user.id,
-    },
-    data: {
-      passwordResetCodeHash: codeHash,
-      passwordResetCodeExpiresAt:
-        codeExpiresAt,
-      passwordResetCodeAttempts: 0,
-      passwordResetCodeSentAt:
-        new Date(now),
-
-      // Invalidate any previous reset session.
-      resetPasswordTokenHash: null,
-      resetPasswordExpiresAt: null,
-    },
-  });
-
-  await sendPasswordResetCodeEmail(
-    user.email,
-    code,
-  );
-
-  return {
-    maskedEmail: maskEmail(user.email),
-    expiresInSeconds: 10 * 60,
-    resendAfterSeconds: 60,
-  };
 };
 
 /**
@@ -252,21 +396,30 @@ export const verifyPasswordResetCode = async (
       },
       select: {
         id: true,
+        email: true,
+        mobile: true,
+
         passwordResetCodeHash: true,
+
         passwordResetCodeExpiresAt: true,
+
         passwordResetCodeAttempts: true,
+
+        passwordResetOtpSessionId: true,
       },
     });
 
   if (
-    !resetData?.passwordResetCodeHash ||
-    !resetData.passwordResetCodeExpiresAt
+    !resetData?.passwordResetCodeExpiresAt
   ) {
     throw new Error(
       EXPIRED_CODE_ERROR,
     );
   }
 
+  /*
+   * OTP expiration
+   */
   if (
     resetData.passwordResetCodeExpiresAt.getTime() <=
     Date.now()
@@ -276,9 +429,20 @@ export const verifyPasswordResetCode = async (
         id: user.id,
       },
       data: {
-        passwordResetCodeHash: null,
-        passwordResetCodeExpiresAt: null,
-        passwordResetCodeAttempts: 0,
+        passwordResetCodeHash:
+          null,
+
+        passwordResetCodeExpiresAt:
+          null,
+
+        passwordResetCodeAttempts:
+          0,
+
+        passwordResetCodeSentAt:
+          null,
+
+        passwordResetOtpSessionId:
+          null,
       },
     });
 
@@ -287,6 +451,9 @@ export const verifyPasswordResetCode = async (
     );
   }
 
+  /*
+   * Maximum attempts
+   */
   if (
     resetData.passwordResetCodeAttempts >=
     5
@@ -296,47 +463,99 @@ export const verifyPasswordResetCode = async (
     );
   }
 
-  const suppliedCodeHash =
-    hashToken(code.trim());
+  /*
+   * MOBILE / 2FACTOR
+   */
+  if (
+    resetData.mobile &&
+    resetData.passwordResetOtpSessionId
+  ) {
+    try {
+      await verifyTwoFactorOtp(
+        resetData.passwordResetOtpSessionId,
+        code,
+      );
+    } catch (error) {
+      console.error(
+        "2Factor OTP verification failed:",
+        error,
+      );
 
-  const codeMatches = crypto.timingSafeEqual(
-    Buffer.from(
-      suppliedCodeHash,
-      "utf8",
-    ),
-    Buffer.from(
-      resetData.passwordResetCodeHash,
-      "utf8",
-    ),
-  );
-
-  if (!codeMatches) {
-    await prisma.user.update({
-      where: {
-        id: user.id,
-      },
-      data: {
-        passwordResetCodeAttempts: {
-          increment: 1,
+      await prisma.user.update({
+        where: {
+          id: user.id,
         },
-      },
-    });
+        data: {
+          passwordResetCodeAttempts: {
+            increment: 1,
+          },
+        },
+      });
 
+      throw new Error(
+        INVALID_CODE_ERROR,
+      );
+    }
+  }
+
+  /*
+   * EMAIL / LOCAL OTP
+   */
+  else if (
+    resetData.passwordResetCodeHash
+  ) {
+    const suppliedCodeHash =
+      hashToken(code.trim());
+
+    const codeMatches =
+      crypto.timingSafeEqual(
+        Buffer.from(
+          suppliedCodeHash,
+          "utf8",
+        ),
+        Buffer.from(
+          resetData.passwordResetCodeHash,
+          "utf8",
+        ),
+      );
+
+    if (!codeMatches) {
+      await prisma.user.update({
+        where: {
+          id: user.id,
+        },
+        data: {
+          passwordResetCodeAttempts: {
+            increment: 1,
+          },
+        },
+      });
+
+      throw new Error(
+        INVALID_CODE_ERROR,
+      );
+    }
+  } else {
     throw new Error(
-      INVALID_CODE_ERROR,
+      EXPIRED_CODE_ERROR,
     );
   }
 
-  // Code has been successfully verified.
+  /*
+   * OTP successfully verified.
+   *
+   * Generate a temporary password-reset token.
+   */
   const resetToken =
     crypto.randomBytes(32).toString("hex");
 
   const resetTokenHash =
     hashToken(resetToken);
 
-  const resetExpiresAt = new Date(
-    Date.now() + 15 * 60 * 1000,
-  );
+  const resetExpiresAt =
+    new Date(
+      Date.now() + 15 * 60 * 1000,
+    );
 
   await prisma.user.update({
     where: {
@@ -345,20 +564,32 @@ export const verifyPasswordResetCode = async (
     data: {
       resetPasswordTokenHash:
         resetTokenHash,
+
       resetPasswordExpiresAt:
         resetExpiresAt,
 
-      // Code becomes unusable after successful verification.
-      passwordResetCodeHash: null,
-      passwordResetCodeExpiresAt: null,
-      passwordResetCodeAttempts: 0,
-      passwordResetCodeSentAt: null,
+      passwordResetCodeHash:
+        null,
+
+      passwordResetCodeExpiresAt:
+        null,
+
+      passwordResetCodeAttempts:
+        0,
+
+      passwordResetCodeSentAt:
+        null,
+
+      passwordResetOtpSessionId:
+        null,
     },
   });
 
   return {
     resetToken,
-    expiresInSeconds: 15 * 60,
+
+    expiresInSeconds:
+      15 * 60,
   };
 };
 

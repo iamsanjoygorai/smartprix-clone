@@ -6,6 +6,13 @@ import {
   updateProfileSchema,
   changePasswordSchema,
 } from "../validators/user.validator";
+import {
+  getUsers,
+  getUserById,
+  updateUser,
+  setUserDisabledStatus,
+  deleteUser,
+} from "../services/user.service";
 
 /* =========================================================
    UPDATE PROFILE
@@ -528,6 +535,400 @@ export const changePassword = async (
     res.status(500).json({
       success: false,
       message: "Failed to change password",
+    });
+  }
+};
+
+
+/* =========================================================
+   ADMIN AUTH HELPER
+========================================================= */
+
+const getAuthenticatedUserId = (
+  req: Request,
+  res: Response,
+): string | null => {
+  if (!req.user || typeof req.user === "string") {
+    res.status(401).json({
+      success: false,
+      message: "Authentication required",
+    });
+
+    return null;
+  }
+
+  const userId = req.user.userId;
+
+  if (!userId) {
+    res.status(401).json({
+      success: false,
+      message: "Invalid authentication token",
+    });
+
+    return null;
+  }
+
+  return userId;
+};
+
+/* =========================================================
+   ADMIN — LIST USERS
+========================================================= */
+
+export const getAdminUsers = async (
+  req: Request,
+  res: Response,
+) => {
+  console.log("🔥🔥🔥 GET ADMIN USERS CONTROLLER HIT 🔥🔥🔥");
+  console.log("QUERY RECEIVED:", req.query);
+
+  try {
+    const users = await getUsers(req.query);
+
+    return res.status(200).json({
+      success: true,
+      data: users,
+    });
+  } catch (error) {
+    console.error("GET ADMIN USERS ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch users",
+    });
+  }
+};
+
+/* =========================================================
+   ADMIN — GET SINGLE USER
+========================================================= */
+
+export const getAdminUser = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const authenticatedUserId =
+      getAuthenticatedUserId(req, res);
+
+    if (!authenticatedUserId) {
+      return;
+    }
+
+    const userId = Array.isArray(req.params.id)
+      ? req.params.id[0]
+      : req.params.id;
+
+    if (!userId) {
+      res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+
+      return;
+    }
+
+    const user = await getUserById(userId);
+
+    res.status(200).json({
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    console.error(
+      "Failed to fetch admin user:",
+      error,
+    );
+
+    if (
+      error instanceof Error &&
+      error.message === "User not found"
+    ) {
+      res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+
+      return;
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch user",
+    });
+  }
+};
+
+/* =========================================================
+   ADMIN — UPDATE USER
+========================================================= */
+
+export const updateAdminUser = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const actorUserId =
+      getAuthenticatedUserId(req, res);
+
+    if (!actorUserId) {
+      return;
+    }
+
+    const userId = Array.isArray(req.params.id)
+      ? req.params.id[0]
+      : req.params.id;
+
+    if (!userId) {
+      res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+
+      return;
+    }
+
+    const {
+      name,
+      email,
+      mobile,
+      dateOfBirth,
+      gender,
+    } = req.body ?? {};
+
+    const user = await updateUser(
+      actorUserId,
+      userId,
+      {
+        name,
+        email,
+        mobile,
+        dateOfBirth,
+        gender,
+      },
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "User updated successfully",
+      data: user,
+    });
+  } catch (error) {
+    console.error(
+      "Failed to update admin user:",
+      error,
+    );
+
+    if (error instanceof Error) {
+      const knownMessages = [
+        "User not found",
+        "Acting user not found",
+        "SUPER_ADMIN accounts cannot be modified",
+        "Email or mobile number is already in use",
+        "Invalid date of birth",
+      ];
+
+      if (
+        knownMessages.includes(error.message)
+      ) {
+        res.status(
+          error.message === "User not found"
+            ? 404
+            : 400,
+        ).json({
+          success: false,
+          message: error.message,
+        });
+
+        return;
+      }
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update user",
+    });
+  }
+};
+
+/* =========================================================
+   ADMIN — ENABLE / DISABLE USER
+========================================================= */
+
+export const updateAdminUserStatus = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const actorUserId =
+      getAuthenticatedUserId(req, res);
+
+    if (!actorUserId) {
+      return;
+    }
+
+    const userId = Array.isArray(req.params.id)
+      ? req.params.id[0]
+      : req.params.id;
+
+    if (!userId) {
+      res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+
+      return;
+    }
+
+    if (
+      typeof req.body?.disabled !== "boolean"
+    ) {
+      res.status(400).json({
+        success: false,
+        message:
+          "The disabled field must be a boolean",
+      });
+
+      return;
+    }
+
+    const user =
+      await setUserDisabledStatus(
+        actorUserId,
+        userId,
+        req.body.disabled,
+      );
+
+    res.status(200).json({
+      success: true,
+      message: req.body.disabled
+        ? "User disabled successfully"
+        : "User enabled successfully",
+      data: user,
+    });
+  } catch (error) {
+    console.error(
+      "Failed to update user status:",
+      error,
+    );
+
+    if (error instanceof Error) {
+      const knownMessages = [
+        "User not found",
+        "Acting user not found",
+        "You cannot disable your own account",
+        "SUPER_ADMIN accounts cannot be disabled",
+        "SUPER_ADMIN accounts cannot be modified",
+      ];
+
+      if (
+        knownMessages.includes(error.message)
+      ) {
+        res.status(
+          error.message === "User not found"
+            ? 404
+            : 400,
+        ).json({
+          success: false,
+          message: error.message,
+        });
+
+        return;
+      }
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update user status",
+    });
+  }
+};
+
+/* =========================================================
+   ADMIN — DELETE USER
+========================================================= */
+
+export const deleteAdminUser = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const actorUserId =
+      getAuthenticatedUserId(req, res);
+
+    if (!actorUserId) {
+      return;
+    }
+
+    const userId = Array.isArray(req.params.id)
+      ? req.params.id[0]
+      : req.params.id;
+
+    if (!userId) {
+      res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+
+      return;
+    }
+
+    const result = await deleteUser(
+      actorUserId,
+      userId,
+    );
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error(
+      "Failed to delete admin user:",
+      error,
+    );
+
+    if (error instanceof Error) {
+      const knownMessages = [
+        "Acting user not found",
+        "User not found",
+        "Only SUPER_ADMIN can delete users",
+        "You cannot delete your own account",
+        "SUPER_ADMIN accounts cannot be deleted",
+        "This user cannot be deleted because related records still exist",
+      ];
+
+      if (
+        knownMessages.includes(error.message)
+      ) {
+        let statusCode = 400;
+
+        if (
+          error.message === "User not found" ||
+          error.message === "Acting user not found"
+        ) {
+          statusCode = 404;
+        }
+
+        if (
+          error.message ===
+          "This user cannot be deleted because related records still exist"
+        ) {
+          statusCode = 409;
+        }
+
+        res.status(statusCode).json({
+          success: false,
+          message: error.message,
+        });
+
+        return;
+      }
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete user",
     });
   }
 };

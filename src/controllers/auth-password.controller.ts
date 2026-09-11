@@ -143,12 +143,25 @@ export const sendVerificationCode = async (
       });
     }
 
+    if (
+  message ===
+  "Unable to send verification SMS"
+) {
+  return res.status(502).json({
+    success: false,
+    message,
+  });
+}
+
     return res.status(500).json({
       success: false,
       message:
         "Unable to send verification code",
     });
+
+    
   }
+  
 };
 
 export const verifyCode = async (
@@ -286,6 +299,16 @@ export const resendVerificationCode =
           message,
         });
       }
+
+      if (
+  message ===
+  "Unable to send verification SMS"
+) {
+  return res.status(502).json({
+    success: false,
+    message,
+  });
+}
 
       if (
         message === NO_ACCOUNT_ERROR

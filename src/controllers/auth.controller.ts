@@ -5,7 +5,9 @@ import { loginSchema } from "../validators/auth.validator";
 import {
   loginUser,
   registerUser,
+  loginWithFirebase,
 } from "../services/auth.service";
+
 
 import { registerSchema } from "../validators/register.validator";
 
@@ -74,6 +76,65 @@ export const login = async (
     res.status(500).json({
       success: false,
       message: "Login failed",
+    });
+  }
+};
+
+/* =========================================================
+   FIREBASE LOGIN
+========================================================= */
+
+export const firebaseLogin = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const { idToken } = req.body;
+
+    if (
+      typeof idToken !== "string" ||
+      !idToken.trim()
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Firebase ID token is required",
+      });
+      return;
+    }
+
+    const data = await loginWithFirebase(
+      idToken,
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Firebase login successful",
+      data,
+    });
+  } catch (error) {
+    console.error(
+      "Firebase login failed:",
+      error,
+    );
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Firebase login failed";
+
+    if (
+      message === "Account is disabled"
+    ) {
+      res.status(401).json({
+        success: false,
+        message,
+      });
+      return;
+    }
+
+    res.status(401).json({
+      success: false,
+      message: "Firebase authentication failed",
     });
   }
 };

@@ -14,48 +14,295 @@ const ALLOWED_ROLES = [
 /**
  * GET /api/admin/users
  */
+/**
+ * GET /api/admin/users
+ */
 export const getUsers = async (
-  _req: Request,
+  req: Request,
   res: Response,
 ) => {
   try {
-    const users = await prisma.user.findMany({
-      orderBy: {
-        createdAt: "desc",
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isDisabled: true,
-        createdAt: true,
-        updatedAt: true,
+    // =====================================================
+    // QUERY PARAMETERS
+    // =====================================================
 
-        userRoles: {
-          select: {
-            role: {
-              select: {
-                id: true,
-                name: true,
-                description: true,
+    const page = Math.max(
+      Number.parseInt(String(req.query.page ?? "1"), 10) || 1,
+      1,
+    );
+
+    const limit = Math.min(
+      Math.max(
+        Number.parseInt(String(req.query.limit ?? "20"), 10) || 20,
+        1,
+      ),
+      100,
+    );
+
+    const search =
+      typeof req.query.search === "string"
+        ? req.query.search.trim()
+        : "";
+
+    const role =
+      typeof req.query.role === "string"
+        ? req.query.role.trim().toUpperCase()
+        : "";
+
+    const status =
+      typeof req.query.status === "string"
+        ? req.query.status.trim().toLowerCase()
+        : "";
+
+    const sort =
+      typeof req.query.sort === "string"
+        ? req.query.sort.trim().toLowerCase()
+        : "newest";
+
+    // =====================================================
+    // WHERE
+    // =====================================================
+
+    const where: any = {};
+
+    // Search name / email / mobile
+    if (search) {
+      where.OR = [
+        {
+          name: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          email: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          mobile: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+      ];
+    }
+
+    // Role filter
+    if (
+      role &&
+      role !== "ALL" &&
+      ALLOWED_ROLES.includes(
+        role as (typeof ALLOWED_ROLES)[number],
+      )
+    ) {
+      where.role = role;
+    }
+
+    // Status filter
+    if (status === "active") {
+      where.isDisabled = false;
+    }
+
+    if (status === "disabled") {
+      where.isDisabled = true;
+    }
+
+    // =====================================================
+    // SORT
+    // =====================================================
+
+    let orderBy: any = {
+      createdAt: "desc",
+    };
+
+    switch (sort) {
+      case "oldest":
+        orderBy = {
+          createdAt: "asc",
+        };
+        break;
+
+      case "name-asc":
+        orderBy = {
+          name: "asc",
+        };
+        break;
+
+      case "name-desc":
+        orderBy = {
+          name: "desc",
+        };
+        break;
+
+      case "email-asc":
+        orderBy = {
+          email: "asc",
+        };
+        break;
+
+      case "email-desc":
+        orderBy = {
+          email: "desc",
+        };
+        break;
+
+      case "newest":
+      default:
+        orderBy = {
+          createdAt: "desc",
+        };
+        break;
+    }
+
+    // =====================================================
+    // PAGINATION
+    // =====================================================
+
+    const skip = (page - 1) * limit;
+
+    console.log("========== ADMIN USERS FILTER ==========");
+    console.log("QUERY:", req.query);
+    console.log("SEARCH:", search);
+    console.log("ROLE:", role);
+    console.log("STATUS:", status);
+    console.log("SORT:", sort);
+    console.log("WHERE:", JSON.stringify(where, null, 2));
+    console.log("PAGE:", page);
+    console.log("LIMIT:", limit);
+    console.log("========================================");
+
+    // =====================================================
+    // DATABASE
+    // =====================================================
+
+    const [
+      users,
+      filteredTotal,
+      total,
+      active,
+      disabled,
+      admins,
+    ] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          email: true,
+          mobile: true,
+          name: true,
+          role: true,
+          isDisabled: true,
+          dateOfBirth: true,
+          gender: true,
+          createdAt: true,
+          updatedAt: true,
+
+          userRoles: {
+            select: {
+              role: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                },
               },
             },
           },
         },
-      },
-    });
+      }),
+
+      // Total matching current filters
+      prisma.user.count({
+        where,
+      }),
+
+      // Global statistics
+      prisma.user.count(),
+
+      prisma.user.count({
+        where: {
+          isDisabled: false,
+        },
+      }),
+
+      prisma.user.count({
+        where: {
+          isDisabled: true,
+        },
+      }),
+
+      prisma.user.count({
+        where: {
+          role: {
+            in: ["ADMIN", "SUPER_ADMIN"],
+          },
+        },
+      }),
+    ]);
+
+    const totalPages =
+      filteredTotal === 0
+        ? 0
+        : Math.ceil(filteredTotal / limit);
+
+    console.log(
+      "FILTERED USERS:",
+      users.length,
+    );
+
+    console.log(
+      "FILTERED TOTAL:",
+      filteredTotal,
+    );
+
+    // =====================================================
+    // RESPONSE
+    // =====================================================
 
     return res.status(200).json({
       success: true,
-      data: users,
+
+      data: {
+        users,
+
+        stats: {
+          total,
+          active,
+          disabled,
+          admins,
+        },
+
+        pagination: {
+          page,
+          limit,
+          total: filteredTotal,
+          totalPages,
+
+          hasNextPage:
+            page < totalPages,
+
+          hasPreviousPage:
+            page > 1,
+        },
+      },
     });
   } catch (error) {
-    console.error("Get users error:", error);
+    console.error(
+      "Get users error:",
+      error,
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch users",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch users",
     });
   }
 };

@@ -30,6 +30,7 @@ model User {
   passwordResetCodeExpiresAt DateTime?
   passwordResetCodeAttempts  Int      @default(0)
   passwordResetCodeSentAt    DateTime?
+  passwordResetOtpSessionId  String?
 
   reviews     Review[]
   comparisons Comparison[]
