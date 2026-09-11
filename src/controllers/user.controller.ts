@@ -2,6 +2,9 @@ import { Request, Response } from "express";
 import prisma from "../db/prisma";
 import bcrypt from "bcryptjs";
 
+import fs from "fs";
+import path from "path";
+
 import {
   updateProfileSchema,
   changePasswordSchema,
@@ -273,26 +276,26 @@ export const getProfile = async (
       },
 
       select: {
-        id: true,
-        name: true,
-        email: true,
-        mobile: true,
-        dateOfBirth: true,
-        gender: true,
-        role: true,
-        isDisabled: true,
-        createdAt: true,
-        updatedAt: true,
-
-        _count: {
-          select: {
-            reviews: true,
-            favorites: true,
-            comparisons: true,
-            priceAlerts: true,
-          },
-        },
-      },
+  id: true,
+  name: true,
+  email: true,
+  mobile: true,
+  profileImageUrl: true,
+  dateOfBirth: true,
+  gender: true,
+  role: true,
+  isDisabled: true,
+  createdAt: true,
+  updatedAt: true,
+  _count: {
+    select: {
+      reviews: true,
+      favorites: true,
+      comparisons: true,
+      priceAlerts: true,
+    },
+  },
+},
     });
 
     /* -------------------------------------------------------
@@ -328,21 +331,21 @@ export const getProfile = async (
 
       data: {
         id: user.id,
-        name: user.name,
-        email: user.email,
-        mobile: user.mobile,
-        dateOfBirth: user.dateOfBirth,
-        gender: user.gender,
-        role: user.role,
-        isDisabled: user.isDisabled,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-
-        stats: {
-          reviews: user._count.reviews,
-          favorites: user._count.favorites,
-          comparisons: user._count.comparisons,
-          priceAlerts: user._count.priceAlerts,
+  name: user.name,
+  email: user.email,
+  mobile: user.mobile,
+  profileImageUrl: user.profileImageUrl,
+  dateOfBirth: user.dateOfBirth,
+  gender: user.gender,
+  role: user.role,
+  isDisabled: user.isDisabled,
+  createdAt: user.createdAt,
+  updatedAt: user.updatedAt,
+  stats: {
+    reviews: user._count.reviews,
+    favorites: user._count.favorites,
+    comparisons: user._count.comparisons,
+    priceAlerts: user._count.priceAlerts,
         },
       },
     });
@@ -355,6 +358,347 @@ export const getProfile = async (
     res.status(500).json({
       success: false,
       message: "Failed to fetch profile",
+    });
+  }
+};
+
+
+/* =========================================================
+   UPLOAD / REPLACE PROFILE IMAGE
+========================================================= */
+
+export const uploadProfileImage = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    /* -------------------------------------------------------
+       AUTHENTICATION
+    ------------------------------------------------------- */
+
+    if (!req.user || typeof req.user === "string") {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+      return;
+    }
+
+    const userId = req.user.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Invalid authentication token",
+      });
+      return;
+    }
+
+    /* -------------------------------------------------------
+       CHECK FILE
+    ------------------------------------------------------- */
+
+    if (!req.file) {
+      res.status(400).json({
+        success: false,
+        message: "Please select a profile picture",
+      });
+      return;
+    }
+
+    /* -------------------------------------------------------
+       CHECK USER
+    ------------------------------------------------------- */
+
+    const currentUser = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        id: true,
+        isDisabled: true,
+        profileImageUrl: true,
+      },
+    });
+
+    if (!currentUser) {
+      // Remove newly uploaded file if user doesn't exist.
+      if (req.file.path) {
+        try {
+          await fs.promises.unlink(req.file.path);
+        } catch {
+          // Ignore cleanup error.
+        }
+      }
+
+      res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+      return;
+    }
+
+    if (currentUser.isDisabled) {
+      if (req.file.path) {
+        try {
+          await fs.promises.unlink(req.file.path);
+        } catch {
+          // Ignore cleanup error.
+        }
+      }
+
+      res.status(403).json({
+        success: false,
+        message: "Account is disabled",
+      });
+      return;
+    }
+
+    /* -------------------------------------------------------
+       BUILD PUBLIC IMAGE URL
+    ------------------------------------------------------- */
+
+    const relativePath = `/uploads/profile/${req.file.filename}`;
+
+    const protocol =
+      req.headers["x-forwarded-proto"] ||
+      req.protocol;
+
+    const host = req.get("host");
+
+    const profileImageUrl =
+      `${protocol}://${host}${relativePath}`;
+
+    /* -------------------------------------------------------
+       UPDATE DATABASE
+    ------------------------------------------------------- */
+
+    const updatedUser = await prisma.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        profileImageUrl,
+      },
+      select: {
+  id: true,
+  name: true,
+  email: true,
+  mobile: true,
+  profileImageUrl: true,
+  dateOfBirth: true,
+  gender: true,
+  role: true,
+  isDisabled: true,
+  createdAt: true,
+  updatedAt: true,
+},
+    });
+
+    /* -------------------------------------------------------
+       DELETE OLD IMAGE
+    ------------------------------------------------------- */
+
+    if (
+      currentUser.profileImageUrl &&
+      currentUser.profileImageUrl.includes("/uploads/profile/")
+    ) {
+      try {
+        const oldUrl = new URL(
+          currentUser.profileImageUrl,
+        );
+
+        const oldFilePath = path.join(
+          process.cwd(),
+          oldUrl.pathname.replace(/^\/+/, ""),
+        );
+
+        if (
+          fs.existsSync(oldFilePath) &&
+          oldFilePath !== req.file.path
+        ) {
+          await fs.promises.unlink(oldFilePath);
+        }
+      } catch (cleanupError) {
+        console.warn(
+          "Failed to remove old profile image:",
+          cleanupError,
+        );
+      }
+    }
+
+    /* -------------------------------------------------------
+       RESPONSE
+    ------------------------------------------------------- */
+
+    res.status(200).json({
+      success: true,
+      message: "Profile picture updated successfully",
+      data: updatedUser,
+    });
+  } catch (error) {
+    console.error(
+      "Upload profile image failed:",
+      error,
+    );
+
+    /* -------------------------------------------------------
+       CLEANUP NEW FILE ON FAILURE
+    ------------------------------------------------------- */
+
+    if (req.file?.path) {
+      try {
+        await fs.promises.unlink(req.file.path);
+      } catch {
+        // Ignore cleanup error.
+      }
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update profile picture",
+    });
+  }
+};
+
+
+/* =========================================================
+   DELETE PROFILE IMAGE
+========================================================= */
+
+export const deleteProfileImage = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    /* -------------------------------------------------------
+       AUTHENTICATION
+    ------------------------------------------------------- */
+
+    if (!req.user || typeof req.user === "string") {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+      return;
+    }
+
+    const userId = req.user.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Invalid authentication token",
+      });
+      return;
+    }
+
+    /* -------------------------------------------------------
+       GET CURRENT USER
+    ------------------------------------------------------- */
+
+    const currentUser = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        id: true,
+        isDisabled: true,
+        profileImageUrl: true,
+      },
+    });
+
+    if (!currentUser) {
+      res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+      return;
+    }
+
+    if (currentUser.isDisabled) {
+      res.status(403).json({
+        success: false,
+        message: "Account is disabled",
+      });
+      return;
+    }
+
+    /* -------------------------------------------------------
+       NOTHING TO DELETE
+    ------------------------------------------------------- */
+
+    if (!currentUser.profileImageUrl) {
+      res.status(200).json({
+        success: true,
+        message: "No profile picture to remove",
+      });
+      return;
+    }
+
+    /* -------------------------------------------------------
+       CLEAR DATABASE
+    ------------------------------------------------------- */
+
+    await prisma.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        profileImageUrl: null,
+      },
+    });
+
+    /* -------------------------------------------------------
+       DELETE PHYSICAL FILE
+    ------------------------------------------------------- */
+
+    if (
+      currentUser.profileImageUrl.includes(
+        "/uploads/profile/",
+      )
+    ) {
+      try {
+        const oldUrl = new URL(
+          currentUser.profileImageUrl,
+        );
+
+        const oldFilePath = path.join(
+          process.cwd(),
+          oldUrl.pathname.replace(/^\/+/, ""),
+        );
+
+        if (fs.existsSync(oldFilePath)) {
+          await fs.promises.unlink(oldFilePath);
+        }
+      } catch (cleanupError) {
+        console.warn(
+          "Failed to delete profile image file:",
+          cleanupError,
+        );
+      }
+    }
+
+    /* -------------------------------------------------------
+       RESPONSE
+    ------------------------------------------------------- */
+
+    res.status(200).json({
+      success: true,
+      message: "Profile picture removed successfully",
+      data: {
+        profileImageUrl: null,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "Delete profile image failed:",
+      error,
+    );
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to remove profile picture",
     });
   }
 };

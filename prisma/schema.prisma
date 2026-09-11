@@ -22,6 +22,7 @@ model User {
 
   dateOfBirth  DateTime?
   gender       String?
+  profileImageUrl String?
 
   resetPasswordTokenHash     String?
   resetPasswordExpiresAt     DateTime?

@@ -4,9 +4,15 @@ import {
   getProfile,
   updateProfile,
   changePassword,
+  uploadProfileImage,
+  deleteProfileImage,
 } from "../controllers/user.controller";
 
 import { requireAuth } from "../middlewares/auth.middleware";
+
+import {
+  profileImageUpload,
+} from "../middlewares/upload.middleware";
 
 const router = Router();
 
@@ -29,6 +35,21 @@ router.put(
 router.put(
   "/password",
   changePassword,
+);
+
+/* =========================================================
+   PROFILE IMAGE
+========================================================= */
+
+router.post(
+  "/profile/image",
+  profileImageUpload.single("image"),
+  uploadProfileImage,
+);
+
+router.delete(
+  "/profile/image",
+  deleteProfileImage,
 );
 
 export default router;
