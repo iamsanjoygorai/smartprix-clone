@@ -14,6 +14,10 @@ import { createAuditLog } from "./audit.service";
    LOGIN
 ========================================================= */
 
+/* =========================================================
+   LOGIN
+========================================================= */
+
 export const loginUser = async (input: LoginInput) => {
   const identifier = input.identifier.trim();
 
@@ -26,6 +30,7 @@ export const loginUser = async (input: LoginInput) => {
    *
    * Mobile is normalized to digits only.
    */
+
   const normalizedMobile = identifier.replace(/\D/g, "");
   const isEmail = identifier.includes("@");
 
@@ -47,6 +52,16 @@ export const loginUser = async (input: LoginInput) => {
 
   if (!user || !user.passwordHash) {
     throw new Error("Invalid email or password");
+  }
+
+  /* -------------------------------------------------------
+     DELETED ACCOUNT
+  ------------------------------------------------------- */
+
+  if (user.isDeleted) {
+    throw new Error(
+      "This account has been permanently deleted",
+    );
   }
 
   /* -------------------------------------------------------
@@ -95,6 +110,7 @@ export const loginUser = async (input: LoginInput) => {
    * Start with permissions provided by the user's
    * assigned role(s).
    */
+
   const effectivePermissions = new Set<string>(
     userRoles.flatMap((userRole) =>
       userRole.role.permissions.map(
@@ -107,6 +123,7 @@ export const loginUser = async (input: LoginInput) => {
   /*
    * SUPER_ADMIN always has every permission.
    */
+
   if (user.role === "SUPER_ADMIN") {
     const allPermissions =
       await prisma.permission.findMany({
@@ -121,13 +138,8 @@ export const loginUser = async (input: LoginInput) => {
   } else {
     /*
      * Apply individual user permission overrides.
-     *
-     * allowed = true
-     *   → add permission
-     *
-     * allowed = false
-     *   → remove permission
      */
+
     const userOverrides =
       await prisma.userPermission.findMany({
         where: {
@@ -169,20 +181,20 @@ export const loginUser = async (input: LoginInput) => {
   ======================================================= */
 
   await createAuditLog({
-  actorUserId: user.id,
-  targetUserId: user.id,
-  action: "USER_LOGIN",
-  metadata: {
-    method: "password",
-    identifierType: isEmail
-      ? "email"
-      : "mobile",
-    name: user.name,
-    email: user.email,
-    mobile: user.mobile,
-    role: user.role,
-  },
-});
+    actorUserId: user.id,
+    targetUserId: user.id,
+    action: "USER_LOGIN",
+    metadata: {
+      method: "password",
+      identifierType: isEmail
+        ? "email"
+        : "mobile",
+      name: user.name,
+      email: user.email,
+      mobile: user.mobile,
+      role: user.role,
+    },
+  });
 
   /* =======================================================
      RESPONSE

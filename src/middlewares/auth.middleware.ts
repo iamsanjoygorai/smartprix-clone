@@ -48,14 +48,13 @@ export const requireAuth = async (
     const userId = decoded.userId;
 
     const user = await prisma.user.findUnique({
-      where: {
-        id: userId,
-      },
-      select: {
-        id: true,
-        isDisabled: true,
-      },
-    });
+  where: { id: userId },
+  select: {
+    id: true,
+    isDisabled: true,
+    isDeleted: true,
+  },
+});
 
     if (!user) {
       res.status(401).json({
@@ -64,6 +63,14 @@ export const requireAuth = async (
       });
       return;
     }
+
+    if (user.isDeleted) {
+  res.status(403).json({
+    success: false,
+    message: "This account has been permanently deleted",
+  });
+  return;
+}
 
     if (user.isDisabled) {
       res.status(401).json({

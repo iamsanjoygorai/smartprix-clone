@@ -12,24 +12,32 @@ datasource db {
 // ─────────────────────────────────────────────
 
 model User {
-  id           String   @id @default(cuid())
-  email        String?  @unique
-  mobile       String?  @unique
+  id           String  @id @default(cuid())
+  email        String? @unique
+  mobile       String? @unique
   name         String?
   passwordHash String?
-  role         String   @default("USER")
-  isDisabled   Boolean  @default(false)
+  role         String  @default("USER")
 
-  dateOfBirth  DateTime?
-  gender       String?
+  // Account status
+  isDisabled Boolean @default(false)
+
+  // Soft deletion
+  // The User row is NEVER physically deleted.
+  isDeleted      Boolean   @default(false)
+  deletedAt      DateTime?
+  deletionReason String?
+
+  dateOfBirth     DateTime?
+  gender          String?
   profileImageUrl String?
 
-  resetPasswordTokenHash     String?
-  resetPasswordExpiresAt     DateTime?
+  resetPasswordTokenHash String?
+  resetPasswordExpiresAt DateTime?
 
   passwordResetCodeHash      String?
   passwordResetCodeExpiresAt DateTime?
-  passwordResetCodeAttempts  Int      @default(0)
+  passwordResetCodeAttempts  Int       @default(0)
   passwordResetCodeSentAt    DateTime?
   passwordResetOtpSessionId  String?
 
@@ -38,12 +46,15 @@ model User {
   favorites   Favorite[]
   priceAlerts PriceAlert[]
 
-  userRoles UserRole[]
-  auditLogs AuditLog[] @relation("AuditActor")
+  userRoles       UserRole[]
+  auditLogs       AuditLog[]       @relation("AuditActor")
   userPermissions UserPermission[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([isDeleted])
+  @@index([isDeleted, createdAt])
 }
 
 model Role {
@@ -107,12 +118,7 @@ model AuditLog {
   action   String
   metadata Json?
 
-  actor User? @relation(
-    "AuditActor",
-    fields: [actorUserId],
-    references: [id],
-    onDelete: SetNull
-  )
+  actor User? @relation(name: "AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
 
@@ -123,13 +129,13 @@ model AuditLog {
 }
 
 model SearchQuery {
-  id        String   @id @default(cuid())
-  query     String
-  normalized String
-  count     Int      @default(1)
+  id             String   @id @default(cuid())
+  query          String
+  normalized     String
+  count          Int      @default(1)
   lastSearchedAt DateTime @default(now())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@unique([normalized])
   @@index([count])

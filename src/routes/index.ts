@@ -34,8 +34,7 @@ import searchRoutes from "./search.routes";
 import userRoutes from "./user.routes";
 import favoriteRoutes from "./favorite.routes";
 import { getMyProfileHistory } from "../controllers/profile-history.controller";
-
-
+import accountRoutes from "../modules/account/account.routes";
 
 
 const router = Router();
@@ -260,5 +259,7 @@ router.use(
   requireAuth,
   adminAuditRoutes,
 );
+
+router.use("/profile", accountRoutes);
 
 export default router;
