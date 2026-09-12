@@ -107,7 +107,12 @@ model AuditLog {
   action   String
   metadata Json?
 
-  actor User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actor User? @relation(
+    "AuditActor",
+    fields: [actorUserId],
+    references: [id],
+    onDelete: SetNull
+  )
 
   createdAt DateTime @default(now())
 

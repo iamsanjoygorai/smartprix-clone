@@ -16,6 +16,7 @@ import {
   setUserDisabledStatus,
   deleteUser,
 } from "../services/user.service";
+import { createAuditLog } from "../services/audit.service";
 
 /* =========================================================
    UPDATE PROFILE
@@ -75,17 +76,18 @@ export const updateProfile = async (
        CHECK CURRENT USER
     ------------------------------------------------------- */
 
-    const currentUser = await prisma.user.findUnique({
-      where: {
-        id: userId,
-      },
-      select: {
-        id: true,
-        email: true,
-        mobile: true,
-        isDisabled: true,
-      },
-    });
+   const currentUser = await prisma.user.findUnique({
+  where: { id: userId },
+  select: {
+    id: true,
+    name: true,
+    email: true,
+    mobile: true,
+    dateOfBirth: true,
+    gender: true,
+    isDisabled: true,
+  },
+});
 
     if (!currentUser) {
       res.status(404).json({
@@ -159,6 +161,34 @@ export const updateProfile = async (
       `${dateOfBirth}T00:00:00`,
     );
 
+    const changedFields: string[] = [];
+
+if (currentUser.name !== name) {
+  changedFields.push("name");
+}
+
+if (currentUser.email !== email) {
+  changedFields.push("email");
+}
+
+if (currentUser.mobile !== mobile) {
+  changedFields.push("mobile");
+}
+
+const currentDob = currentUser.dateOfBirth
+  ? currentUser.dateOfBirth.toISOString().slice(0, 10)
+  : null;
+
+const newDob = dateOfBirth || null;
+
+if (currentDob !== newDob) {
+  changedFields.push("dateOfBirth");
+}
+
+if (currentUser.gender !== gender) {
+  changedFields.push("gender");
+}
+
     if (Number.isNaN(parsedDate.getTime())) {
       res.status(400).json({
         success: false,
@@ -197,6 +227,17 @@ export const updateProfile = async (
         updatedAt: true,
       },
     });
+
+    if (changedFields.length > 0) {
+  await createAuditLog({
+    actorUserId: userId,
+    targetUserId: userId,
+    action: "PROFILE_UPDATED",
+    metadata: {
+      changedFields,
+    },
+  });
+}
 
     /* -------------------------------------------------------
        RESPONSE
@@ -481,18 +522,18 @@ export const uploadProfileImage = async (
         profileImageUrl,
       },
       select: {
-  id: true,
-  name: true,
-  email: true,
-  mobile: true,
-  profileImageUrl: true,
-  dateOfBirth: true,
-  gender: true,
-  role: true,
-  isDisabled: true,
-  createdAt: true,
-  updatedAt: true,
-},
+        id: true,
+        name: true,
+        email: true,
+        mobile: true,
+        profileImageUrl: true,
+        dateOfBirth: true,
+        gender: true,
+        role: true,
+        isDisabled: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
     /* -------------------------------------------------------
@@ -501,7 +542,9 @@ export const uploadProfileImage = async (
 
     if (
       currentUser.profileImageUrl &&
-      currentUser.profileImageUrl.includes("/uploads/profile/")
+      currentUser.profileImageUrl.includes(
+        "/uploads/profile/",
+      )
     ) {
       try {
         const oldUrl = new URL(
@@ -526,6 +569,21 @@ export const uploadProfileImage = async (
         );
       }
     }
+
+    /* =======================================================
+       AUDIT — PROFILE IMAGE UPDATED
+    ======================================================= */
+
+    await createAuditLog({
+      actorUserId: userId,
+      targetUserId: userId,
+      action: "PROFILE_IMAGE_UPDATED",
+      metadata: {
+        hadPreviousImage:
+          Boolean(currentUser.profileImageUrl),
+        profileImageUrl,
+      },
+    });
 
     /* -------------------------------------------------------
        RESPONSE
@@ -560,6 +618,7 @@ export const uploadProfileImage = async (
     });
   }
 };
+
 
 
 /* =========================================================
@@ -679,6 +738,20 @@ export const deleteProfileImage = async (
       }
     }
 
+    /* =======================================================
+       AUDIT — PROFILE IMAGE DELETED
+    ======================================================= */
+
+    await createAuditLog({
+      actorUserId: userId,
+      targetUserId: userId,
+      action: "PROFILE_IMAGE_DELETED",
+      metadata: {
+        profileImageUrl:
+          currentUser.profileImageUrl,
+      },
+    });
+
     /* -------------------------------------------------------
        RESPONSE
     ------------------------------------------------------- */
@@ -702,6 +775,7 @@ export const deleteProfileImage = async (
     });
   }
 };
+
 
 /* =========================================================
    PERMANENTLY DELETE CURRENT USER ACCOUNT
@@ -743,11 +817,15 @@ export const deleteAccount = async (
         id: userId,
       },
       select: {
-        id: true,
-        passwordHash: true,
-        isDisabled: true,
-        profileImageUrl: true,
-      },
+  id: true,
+  name: true,
+  email: true,
+  mobile: true,
+  role: true,
+  passwordHash: true,
+  isDisabled: true,
+  profileImageUrl: true,
+},
     });
 
     if (!user) {
@@ -846,6 +924,21 @@ export const deleteAccount = async (
         );
       }
     }
+
+
+    await createAuditLog({
+  actorUserId: userId,
+  targetUserId: userId,
+  action: "USER_DELETED",
+  metadata: {
+    deletedUserId: user.id,
+    name: user.name,
+    email: user.email,
+    mobile: user.mobile,
+    role: user.role,
+    reason: "User permanently deleted account",
+  },
+});
 
     /* -------------------------------------------------------
        PERMANENTLY DELETE USER

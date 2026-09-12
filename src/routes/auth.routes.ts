@@ -6,6 +6,7 @@ import {
   getMe,
   firebaseLogin,
   updateProfile,
+  logout,
 } from "../controllers/auth.controller";
 
 import { requireAuth } from "../middlewares/auth.middleware";
@@ -17,6 +18,12 @@ const router = Router();
 ========================================================= */
 
 router.post("/login", login);
+
+router.post(
+  "/logout",
+  requireAuth,
+  logout,
+);
 
 router.post("/register", register);
 

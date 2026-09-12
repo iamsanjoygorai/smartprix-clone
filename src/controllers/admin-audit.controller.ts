@@ -50,31 +50,26 @@ export const getAuditLogs = async (
       ...(action && {
         action,
       }),
-
       ...(actorUserId && {
         actorUserId,
       }),
-
       ...(targetUserId && {
         targetUserId,
       }),
     };
 
     /*
-     * Fetch logs + total count together
+     * Fetch logs + total
      */
     const [logs, total] =
       await prisma.$transaction([
         prisma.auditLog.findMany({
           where,
-
           orderBy: {
             createdAt: "desc",
           },
-
           skip,
           take: limit,
-
           include: {
             actor: {
               select: {
@@ -82,6 +77,7 @@ export const getAuditLogs = async (
                 email: true,
                 name: true,
                 role: true,
+                profileImageUrl: true,
               },
             },
           },
@@ -92,25 +88,129 @@ export const getAuditLogs = async (
         }),
       ]);
 
+    /*
+     * Restore deleted-user information
+     *
+     * When a user is permanently deleted,
+     * actor becomes null because the User record
+     * no longer exists.
+     *
+     * USER_DELETED metadata contains the original
+     * user's name, email and role.
+     */
+    const normalizedLogs = logs.map((log) => {
+      if (
+        log.action === "USER_DELETED" &&
+        !log.actor
+      ) {
+        const metadata =
+          log.metadata &&
+          typeof log.metadata === "object"
+            ? (log.metadata as Record<
+                string,
+                unknown
+              >)
+            : {};
+
+        return {
+          ...log,
+
+          actor: {
+            id:
+              typeof metadata.deletedUserId ===
+              "string"
+                ? metadata.deletedUserId
+                : log.targetUserId ??
+                  log.actorUserId ??
+                  "deleted-user",
+
+            name:
+              typeof metadata.name === "string"
+                ? metadata.name
+                : null,
+
+            email:
+              typeof metadata.email === "string"
+                ? metadata.email
+                : null,
+
+            role:
+              typeof metadata.role === "string"
+                ? metadata.role
+                : "USER",
+
+            profileImageUrl: null,
+          },
+        };
+      }
+
+      return log;
+    });
+
     const totalPages =
       Math.ceil(total / limit);
 
+    /*
+     * Stats
+     */
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayLogs =
+      await prisma.auditLog.count({
+        where: {
+          ...where,
+          createdAt: {
+            gte: todayStart,
+          },
+        },
+      });
+
+    const adminActions =
+      await prisma.auditLog.count({
+        where: {
+          ...where,
+          actorUserId: {
+            not: null,
+          },
+          targetUserId: {
+            not: null,
+          },
+        },
+      });
+
+    /*
+     * Return response
+     */
     return res.status(200).json({
       success: true,
 
-      data: logs,
+      data: {
+        logs: normalizedLogs,
 
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages,
+        stats: {
+          total,
+          today: todayLogs,
+          adminActions,
+          failed: 0,
+        },
 
-        hasNextPage:
-          page < totalPages,
+        filters: {
+          actions: [],
+          resources: [],
+          admins: [],
+        },
 
-        hasPreviousPage:
-          page > 1,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+          hasNextPage:
+            page < totalPages,
+          hasPreviousPage:
+            page > 1,
+        },
       },
     });
   } catch (error) {

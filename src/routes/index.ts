@@ -33,6 +33,9 @@ import adminSpecificationRoutes from "./admin-specification.routes";
 import searchRoutes from "./search.routes";
 import userRoutes from "./user.routes";
 import favoriteRoutes from "./favorite.routes";
+import { getMyProfileHistory } from "../controllers/profile-history.controller";
+
+
 
 
 const router = Router();
@@ -44,6 +47,17 @@ const router = Router();
 router.use("/auth", authRoutes);
 
 router.use("/auth", authPasswordRoutes);
+
+
+// ==============================
+// Profile
+// ==============================
+
+router.get(
+  "/profile/history",
+  requireAuth,
+  getMyProfileHistory,
+);
 
 // ==============================
 // User Account

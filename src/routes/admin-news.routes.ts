@@ -24,6 +24,7 @@ import {
   getAuditLogs,
   exportAuditLogs,
 } from "../controllers/audit.controller";
+import { getUserHistory } from "../controllers/admin-user-history.controller";  
 
 const router = Router();
 
@@ -36,6 +37,13 @@ router.get(
   "/users",
   requirePermission(PERMISSIONS.USERS_VIEW),
   getAdminUsers,
+);
+
+// View user history
+router.get(
+  "/users/:userId/history",
+  requirePermission(PERMISSIONS.AUDIT_VIEW),
+  getUserHistory,
 );
 
 // View single user

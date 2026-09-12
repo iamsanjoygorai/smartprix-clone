@@ -12,6 +12,7 @@ import {
 import { registerSchema } from "../validators/register.validator";
 
 import prisma from "../db/prisma";
+import { createAuditLog } from "../services/audit.service";
 
 /* =========================================================
    LOGIN
@@ -79,6 +80,13 @@ export const login = async (
     });
   }
 };
+
+
+/* =========================================================
+   LOGOUT
+========================================================= */
+
+
 
 /* =========================================================
    FIREBASE LOGIN
@@ -692,6 +700,62 @@ export const updateProfile = async (
       success: false,
       message:
         "Failed to update profile",
+    });
+  }
+};
+
+/* =========================================================
+   LOGOUT
+========================================================= */
+
+export const logout = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    if (
+      !req.user ||
+      typeof req.user === "string"
+    ) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+      return;
+    }
+
+    const userId = req.user.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Invalid authentication token",
+      });
+      return;
+    }
+
+    await createAuditLog({
+  actorUserId: userId,
+  targetUserId: userId,
+  action: "USER_LOGOUT",
+  metadata: {
+    method: "manual",
+  },
+});
+
+    res.status(200).json({
+      success: true,
+      message: "Logout successful",
+    });
+  } catch (error) {
+    console.error(
+      "Logout failed:",
+      error,
+    );
+
+    res.status(500).json({
+      success: false,
+      message: "Logout failed",
     });
   }
 };

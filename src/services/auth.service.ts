@@ -7,7 +7,8 @@ import { generateToken } from "../config/jwt";
 import type { LoginInput } from "../validators/auth.validator";
 
 import type { RegisterInput } from "../validators/register.validator";
-import { firebaseAdminAuth } from "../config/firebaseAdmin";
+
+import { createAuditLog } from "./audit.service";
 
 /* =========================================================
    LOGIN
@@ -26,7 +27,6 @@ export const loginUser = async (input: LoginInput) => {
    * Mobile is normalized to digits only.
    */
   const normalizedMobile = identifier.replace(/\D/g, "");
-
   const isEmail = identifier.includes("@");
 
   const user = isEmail
@@ -165,12 +165,31 @@ export const loginUser = async (input: LoginInput) => {
   });
 
   /* =======================================================
+     AUDIT — USER LOGIN
+  ======================================================= */
+
+  await createAuditLog({
+  actorUserId: user.id,
+  targetUserId: user.id,
+  action: "USER_LOGIN",
+  metadata: {
+    method: "password",
+    identifierType: isEmail
+      ? "email"
+      : "mobile",
+    name: user.name,
+    email: user.email,
+    mobile: user.mobile,
+    role: user.role,
+  },
+});
+
+  /* =======================================================
      RESPONSE
   ======================================================= */
 
   return {
     token,
-
     user: {
       id: user.id,
       email: user.email,
@@ -181,194 +200,6 @@ export const loginUser = async (input: LoginInput) => {
     },
   };
 };
-
-
-/* =========================================================
-   FIREBASE LOGIN
-========================================================= */
-
-export const loginWithFirebase = async (
-  firebaseIdToken: string,
-) => {
-  /* -------------------------------------------------------
-     VERIFY FIREBASE TOKEN
-  ------------------------------------------------------- */
-
-  const decodedToken =
-    await firebaseAdminAuth.verifyIdToken(
-      firebaseIdToken,
-    );
-
-  const firebaseUid = decodedToken.uid;
-
-  const email = decodedToken.email
-    ? decodedToken.email.trim().toLowerCase()
-    : undefined;
-
-  const mobile = decodedToken.phone_number
-    ? decodedToken.phone_number.replace(/\D/g, "")
-    : undefined;
-
-  if (!email && !mobile) {
-    throw new Error(
-      "Firebase account does not contain an email or mobile number",
-    );
-  }
-
-  /* -------------------------------------------------------
-     FIND EXISTING USER
-  ------------------------------------------------------- */
-
-  let user = await prisma.user.findFirst({
-    where: {
-      OR: [
-        ...(email ? [{ email }] : []),
-        ...(mobile ? [{ mobile }] : []),
-      ],
-    },
-  });
-
-  /* -------------------------------------------------------
-     CREATE USER IF NOT FOUND
-  ------------------------------------------------------- */
-
-  if (!user) {
-    user = await prisma.user.create({
-      data: {
-        name:
-          decodedToken.name ||
-          (mobile ? "Smartprix User" : email?.split("@")[0] || "Smartprix User"),
-
-        email: email || undefined,
-
-        mobile: mobile || undefined,
-
-        passwordHash: null,
-
-        role: "USER",
-
-        isDisabled: false,
-      },
-    });
-  }
-
-  /* -------------------------------------------------------
-     DISABLED ACCOUNT
-  ------------------------------------------------------- */
-
-  if (user.isDisabled) {
-    throw new Error("Account is disabled");
-  }
-
-  /* -------------------------------------------------------
-     ROLE PERMISSIONS
-  ------------------------------------------------------- */
-
-  const userRoles =
-    await prisma.userRole.findMany({
-      where: {
-        userId: user.id,
-      },
-      include: {
-        role: {
-          include: {
-            permissions: {
-              include: {
-                permission: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-  const effectivePermissions =
-    new Set<string>(
-      userRoles.flatMap((userRole) =>
-        userRole.role.permissions.map(
-          (rolePermission) =>
-            rolePermission.permission.name,
-        ),
-      ),
-    );
-
-  /* -------------------------------------------------------
-     SUPER ADMIN
-  ------------------------------------------------------- */
-
-  if (user.role === "SUPER_ADMIN") {
-    const allPermissions =
-      await prisma.permission.findMany({
-        select: {
-          name: true,
-        },
-      });
-
-    for (const permission of allPermissions) {
-      effectivePermissions.add(
-        permission.name,
-      );
-    }
-  } else {
-    /* -----------------------------------------------------
-       INDIVIDUAL PERMISSION OVERRIDES
-    ----------------------------------------------------- */
-
-    const userOverrides =
-      await prisma.userPermission.findMany({
-        where: {
-          userId: user.id,
-        },
-        include: {
-          permission: true,
-        },
-      });
-
-    for (const override of userOverrides) {
-      if (override.allowed) {
-        effectivePermissions.add(
-          override.permission.name,
-        );
-      } else {
-        effectivePermissions.delete(
-          override.permission.name,
-        );
-      }
-    }
-  }
-
-  /* -------------------------------------------------------
-     GENERATE SMARTPRIX JWT
-  ------------------------------------------------------- */
-
-  const token = generateToken({
-    userId: user.id,
-    role: user.role,
-  });
-
-  /* -------------------------------------------------------
-     RESPONSE
-  ------------------------------------------------------- */
-
-  return {
-    token,
-
-    user: {
-      id: user.id,
-      email: user.email,
-      mobile: user.mobile,
-      name: user.name,
-      role: user.role,
-      permissions:
-        Array.from(effectivePermissions),
-    },
-  };
-};
-
-
-/* =========================================================
-   REGISTER
-========================================================= */
 
 /* =========================================================
    REGISTER
@@ -443,62 +274,75 @@ export const registerUser = async (
      PASSWORD HASH
   ------------------------------------------------------- */
 
-  const passwordHash =
-    await bcrypt.hash(
-      input.password,
-      12,
-    );
+  const passwordHash = await bcrypt.hash(
+    input.password,
+    12,
+  );
 
   /* -------------------------------------------------------
      CREATE USER
   ------------------------------------------------------- */
 
-  const user =
-    await prisma.user.create({
-      data: {
-        name: input.name.trim(),
+  const user = await prisma.user.create({
+    data: {
+      name: input.name.trim(),
+      email,
+      mobile,
+      passwordHash,
 
-        email,
+      /*
+       * Public registration can ONLY create
+       * normal USER accounts.
+       *
+       * Never accept role from frontend.
+       */
+      role: "USER",
+      isDisabled: false,
 
-        mobile,
+      /*
+       * DOB
+       */
+      dateOfBirth: input.dateOfBirth
+        ? new Date(
+            `${input.dateOfBirth}T00:00:00`,
+          )
+        : null,
 
-        passwordHash,
+      /*
+       * Gender
+       */
+      gender: input.gender || null,
+    },
+  });
 
-        /*
-         * Public registration can ONLY create
-         * normal USER accounts.
-         *
-         * Never accept role from frontend.
-         */
-        role: "USER",
+  /* -------------------------------------------------------
+     AUDIT — USER REGISTERED
+  ------------------------------------------------------- */
 
-        isDisabled: false,
-
-        /*
-         * DOB
-         */
-        dateOfBirth: input.dateOfBirth
-          ? new Date(
-              `${input.dateOfBirth}T00:00:00`,
-            )
-          : null,
-
-        /*
-         * Gender
-         */
-        gender: input.gender || null,
-      },
-    });
+  await createAuditLog({
+    actorUserId: user.id,
+    targetUserId: user.id,
+    action: "USER_REGISTERED",
+    metadata: {
+      method: "password",
+      name: user.name,
+      email: user.email,
+      mobile: user.mobile,
+      role: user.role,
+    },
+  });
 
   /* -------------------------------------------------------
      AUTO LOGIN
+     
+     User is automatically logged in after registration,
+     but this is NOT recorded as USER_LOGIN.
   ------------------------------------------------------- */
 
-  const token =
-    generateToken({
-      userId: user.id,
-      role: user.role,
-    });
+  const token = generateToken({
+    userId: user.id,
+    role: user.role,
+  });
 
   /* -------------------------------------------------------
      RESPONSE
@@ -506,7 +350,6 @@ export const registerUser = async (
 
   return {
     token,
-
     user: {
       id: user.id,
       email: user.email,
