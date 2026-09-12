@@ -23,7 +23,7 @@ model User {
   isDisabled Boolean @default(false)
 
   // Soft deletion
-  // The User row is NEVER physically deleted.
+  // User row is NEVER physically deleted.
   isDeleted      Boolean   @default(false)
   deletedAt      DateTime?
   deletionReason String?
@@ -35,11 +35,11 @@ model User {
   resetPasswordTokenHash String?
   resetPasswordExpiresAt DateTime?
 
-  passwordResetCodeHash      String?
+  passwordResetCodeHash     String?
   passwordResetCodeExpiresAt DateTime?
-  passwordResetCodeAttempts  Int       @default(0)
-  passwordResetCodeSentAt    DateTime?
-  passwordResetOtpSessionId  String?
+  passwordResetCodeAttempts Int       @default(0)
+  passwordResetCodeSentAt   DateTime?
+  passwordResetOtpSessionId String?
 
   reviews     Review[]
   comparisons Comparison[]
@@ -47,14 +47,24 @@ model User {
   priceAlerts PriceAlert[]
 
   userRoles       UserRole[]
-  auditLogs       AuditLog[]       @relation("AuditActor")
   userPermissions UserPermission[]
+
+  // Audit history
+  auditLogsAsActor AuditLog[] @relation("AuditActor")
+  auditLogsAsTarget AuditLog[] @relation("AuditTarget")
+
+  // Sessions
+  sessions UserSession[]
+
+  // Search history
+  searchHistory SearchHistory[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([isDeleted])
   @@index([isDeleted, createdAt])
+  @@index([role])
 }
 
 model Role {
@@ -112,20 +122,146 @@ model RolePermission {
 model AuditLog {
   id String @id @default(cuid())
 
-  actorUserId  String?
+  // Who performed the action?
+  actorUserId String?
+
+  // Who/what was affected?
   targetUserId String?
 
+  // What happened?
   action   String
+  category String
+
+  // Optional entity information
+  entityType String?
+  entityId   String?
+
+  // Human-readable description
+  description String?
+
+  // Structured additional information
   metadata Json?
 
-  actor User? @relation(name: "AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  // Request/session information
+  sessionId String?
+
+  ipAddress String?
+  userAgent String?
+
+  // Approximate location metadata
+  country String?
+  state   String?
+  city    String?
+  timezone String?
 
   createdAt DateTime @default(now())
+
+  // Actor
+  actor User? @relation(
+    name: "AuditActor",
+    fields: [actorUserId],
+    references: [id],
+    onDelete: SetNull
+  )
+
+  // Target
+  targetUser User? @relation(
+    name: "AuditTarget",
+    fields: [targetUserId],
+    references: [id],
+    onDelete: SetNull
+  )
 
   @@index([actorUserId])
   @@index([targetUserId])
   @@index([action])
+  @@index([category])
+  @@index([entityType, entityId])
+  @@index([sessionId])
   @@index([createdAt])
+  @@index([targetUserId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+model UserSession {
+  id String @id @default(cuid())
+
+  userId String
+
+  startedAt DateTime @default(now())
+  lastSeenAt DateTime?
+  endedAt DateTime?
+
+  isActive Boolean @default(true)
+
+  // Device information
+  deviceType String?
+  browser String?
+  operatingSystem String?
+
+  // Network information
+  ipAddress String?
+  userAgent String?
+
+  // Approximate location
+  country  String?
+  state    String?
+  city     String?
+  timezone String?
+
+  // Optional session metadata
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(
+    fields: [userId],
+    references: [id],
+    onDelete: Restrict
+  )
+
+  @@index([userId])
+  @@index([userId, startedAt])
+  @@index([isActive])
+  @@index([startedAt])
+  @@index([endedAt])
+}
+
+model SearchHistory {
+  id String @id @default(cuid())
+
+  userId String?
+  sessionId String?
+
+  query       String
+  normalized  String
+
+  // Filters used during search
+  filters Json?
+
+  // Request information
+  ipAddress String?
+  userAgent String?
+
+  country  String?
+  state    String?
+  city     String?
+  timezone String?
+
+  createdAt DateTime @default(now())
+
+  user User? @relation(
+    fields: [userId],
+    references: [id],
+    onDelete: SetNull
+  )
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([normalized])
+  @@index([createdAt])
+  @@index([userId, createdAt])
 }
 
 model SearchQuery {
