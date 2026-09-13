@@ -4,12 +4,11 @@ import {
   getAuditLogs,
   getUserAuditHistory,
   getUserSessions,
-  getUserSearchHistory,
   getAllSessions,
-  getAllSearchHistory
-} from "../modules/audit/audit.controller";
+  getUserSearchHistory,
+} from "./audit.controller";
 
-import { requireSuperAdmin } from "../middlewares/require-super-admin";
+import { requireSuperAdmin } from "../../middlewares/require-super-admin";
 
 const router = Router();
 
@@ -20,22 +19,23 @@ const router = Router();
 /**
  * GET /api/admin/audit
  *
- * All audit logs
+ * All audit logs with filters and pagination.
  */
 router.get(
-  "/audit",
+  "/",
   requireSuperAdmin,
   getAuditLogs,
 );
 
+
 /**
  * GET /api/admin/audit/sessions
  *
- * ALL user sessions
+ * All user sessions.
  * SUPER ADMIN ONLY.
  */
 router.get(
-  "/audit/sessions",
+  "/sessions",
   requireSuperAdmin,
   getAllSessions,
 );
@@ -43,11 +43,10 @@ router.get(
 /**
  * GET /api/admin/audit/sessions/:userId
  *
- * User sessions
- * SUPER ADMIN ONLY.
+ * User session history.
  */
 router.get(
-  "/audit/sessions/:userId",
+  "/sessions/:userId",
   requireSuperAdmin,
   getUserSessions,
 );
@@ -55,28 +54,21 @@ router.get(
 /**
  * GET /api/admin/audit/search/:userId
  *
- * User search history
+ * User search history.
  */
 router.get(
-  "/audit/search/:userId",
+  "/search/:userId",
   requireSuperAdmin,
   getUserSearchHistory,
-);
-
-
-router.get(
-  "/audit/search",
-  requireSuperAdmin,
-  getAllSearchHistory,
 );
 
 /**
  * GET /api/admin/audit/:userId
  *
- * Complete user audit history
+ * Complete audit history for a user.
  */
 router.get(
-  "/audit/:userId",
+  "/:userId",
   requireSuperAdmin,
   getUserAuditHistory,
 );

@@ -5,39 +5,171 @@ import prisma from "../db/prisma";
 import { generateToken } from "../config/jwt";
 
 import type { LoginInput } from "../validators/auth.validator";
-
 import type { RegisterInput } from "../validators/register.validator";
 
-import { createAuditLog } from "./audit.service";
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function detectDeviceType(
+  userAgent: string,
+): string {
+  const ua = userAgent.toLowerCase();
+
+  if (
+    ua.includes("mobile") ||
+    ua.includes("android") ||
+    ua.includes("iphone") ||
+    ua.includes("ipad")
+  ) {
+    return "Mobile";
+  }
+
+  return "Desktop";
+}
+
+function detectBrowser(
+  userAgent: string,
+): string {
+  if (/edg\//i.test(userAgent)) {
+    return "Microsoft Edge";
+  }
+
+  if (/chrome\//i.test(userAgent)) {
+    return "Google Chrome";
+  }
+
+  if (/firefox\//i.test(userAgent)) {
+    return "Mozilla Firefox";
+  }
+
+  if (/safari\//i.test(userAgent) &&
+      !/chrome\//i.test(userAgent)) {
+    return "Safari";
+  }
+
+  if (/opr\//i.test(userAgent)) {
+    return "Opera";
+  }
+
+  return "Unknown";
+}
+
+function detectOperatingSystem(
+  userAgent: string,
+): string {
+  if (/windows/i.test(userAgent)) {
+    return "Windows";
+  }
+
+  if (/android/i.test(userAgent)) {
+    return "Android";
+  }
+
+  if (
+    /iphone|ipad|ipod/i.test(userAgent)
+  ) {
+    return "iOS";
+  }
+
+  if (/macintosh|mac os x/i.test(userAgent)) {
+    return "macOS";
+  }
+
+  if (/linux/i.test(userAgent)) {
+    return "Linux";
+  }
+
+  return "Unknown";
+}
+
+/**
+ * Build session information from the request.
+ *
+ * We intentionally store the IP and User-Agent,
+ * but never store authentication credentials.
+ */
+function getSessionInfo(
+  req?: {
+    ip?: string;
+    headers?: {
+      [key: string]: string | string[] | undefined;
+    };
+    socket?: {
+      remoteAddress?: string;
+    };
+  },
+) {
+  const userAgent =
+    typeof req?.headers?.["user-agent"] ===
+    "string"
+      ? req.headers["user-agent"]
+      : "";
+
+  const ipAddress =
+    req?.ip ||
+    req?.socket?.remoteAddress ||
+    null;
+
+  return {
+    ipAddress,
+    userAgent: userAgent || null,
+
+    deviceType: userAgent
+      ? detectDeviceType(userAgent)
+      : null,
+
+    browser: userAgent
+      ? detectBrowser(userAgent)
+      : null,
+
+    operatingSystem: userAgent
+      ? detectOperatingSystem(userAgent)
+      : null,
+  };
+}
 
 /* =========================================================
    LOGIN
 ========================================================= */
 
-/* =========================================================
-   LOGIN
-========================================================= */
-
-export const loginUser = async (input: LoginInput) => {
-  const identifier = input.identifier.trim();
+export const loginUser = async (
+  input: LoginInput,
+  req?: {
+    ip?: string;
+    headers?: {
+      [key: string]: string | string[] | undefined;
+    };
+    socket?: {
+      remoteAddress?: string;
+    };
+  },
+) => {
+  const identifier =
+    input.identifier.trim();
 
   if (!identifier) {
-    throw new Error("Invalid email or password");
+    throw new Error(
+      "Invalid email or password",
+    );
   }
 
   /*
-   * Determine whether the user entered an email or mobile.
-   *
-   * Mobile is normalized to digits only.
+   * Determine whether the user entered
+   * an email or mobile.
    */
 
-  const normalizedMobile = identifier.replace(/\D/g, "");
-  const isEmail = identifier.includes("@");
+  const normalizedMobile =
+    identifier.replace(/\D/g, "");
+
+  const isEmail =
+    identifier.includes("@");
 
   const user = isEmail
     ? await prisma.user.findUnique({
         where: {
-          email: identifier.toLowerCase(),
+          email:
+            identifier.toLowerCase(),
         },
       })
     : await prisma.user.findFirst({
@@ -51,7 +183,9 @@ export const loginUser = async (input: LoginInput) => {
   ------------------------------------------------------- */
 
   if (!user || !user.passwordHash) {
-    throw new Error("Invalid email or password");
+    throw new Error(
+      "Invalid email or password",
+    );
   }
 
   /* -------------------------------------------------------
@@ -69,56 +203,61 @@ export const loginUser = async (input: LoginInput) => {
   ------------------------------------------------------- */
 
   if (user.isDisabled) {
-    throw new Error("Account is disabled");
+    throw new Error(
+      "Account is disabled",
+    );
   }
 
   /* -------------------------------------------------------
      PASSWORD
   ------------------------------------------------------- */
 
-  const passwordMatches = await bcrypt.compare(
-    input.password,
-    user.passwordHash,
-  );
+  const passwordMatches =
+    await bcrypt.compare(
+      input.password,
+      user.passwordHash,
+    );
 
   if (!passwordMatches) {
-    throw new Error("Invalid email or password");
+    throw new Error(
+      "Invalid email or password",
+    );
   }
 
   /* =======================================================
      ROLE PERMISSIONS
   ======================================================= */
 
-  const userRoles = await prisma.userRole.findMany({
-    where: {
-      userId: user.id,
-    },
-    include: {
-      role: {
-        include: {
-          permissions: {
-            include: {
-              permission: true,
+  const userRoles =
+    await prisma.userRole.findMany({
+      where: {
+        userId: user.id,
+      },
+
+      include: {
+        role: {
+          include: {
+            permissions: {
+              include: {
+                permission: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    });
 
-  /*
-   * Start with permissions provided by the user's
-   * assigned role(s).
-   */
-
-  const effectivePermissions = new Set<string>(
-    userRoles.flatMap((userRole) =>
-      userRole.role.permissions.map(
-        (rolePermission) =>
-          rolePermission.permission.name,
+  const effectivePermissions =
+    new Set<string>(
+      userRoles.flatMap(
+        (userRole) =>
+          userRole.role.permissions.map(
+            (rolePermission) =>
+              rolePermission.permission
+                .name,
+          ),
       ),
-    ),
-  );
+    );
 
   /*
    * SUPER_ADMIN always has every permission.
@@ -132,12 +271,16 @@ export const loginUser = async (input: LoginInput) => {
         },
       });
 
-    for (const permission of allPermissions) {
-      effectivePermissions.add(permission.name);
+    for (
+      const permission of allPermissions
+    ) {
+      effectivePermissions.add(
+        permission.name,
+      );
     }
   } else {
     /*
-     * Apply individual user permission overrides.
+     * Apply individual permission overrides.
      */
 
     const userOverrides =
@@ -145,12 +288,15 @@ export const loginUser = async (input: LoginInput) => {
         where: {
           userId: user.id,
         },
+
         include: {
           permission: true,
         },
       });
 
-    for (const override of userOverrides) {
+    for (
+      const override of userOverrides
+    ) {
       if (override.allowed) {
         effectivePermissions.add(
           override.permission.name,
@@ -163,37 +309,61 @@ export const loginUser = async (input: LoginInput) => {
     }
   }
 
-  const permissions = Array.from(
-    effectivePermissions,
-  );
+  const permissions =
+    Array.from(
+      effectivePermissions,
+    );
 
   /* =======================================================
      TOKEN
   ======================================================= */
 
-  const token = generateToken({
-    userId: user.id,
-    role: user.role,
+  /* =======================================================
+   CREATE USER SESSION
+======================================================= */
+
+const sessionInfo =
+  getSessionInfo(req);
+
+const session =
+  await prisma.userSession.create({
+    data: {
+      userId: user.id,
+
+      startedAt: new Date(),
+
+      lastSeenAt: new Date(),
+
+      isActive: true,
+
+      deviceType:
+        sessionInfo.deviceType,
+
+      browser:
+        sessionInfo.browser,
+
+      operatingSystem:
+        sessionInfo.operatingSystem,
+
+      ipAddress:
+        sessionInfo.ipAddress,
+
+      userAgent:
+        sessionInfo.userAgent,
+    },
   });
 
-  /* =======================================================
-     AUDIT — USER LOGIN
-  ======================================================= */
+  console.log("USER SESSION CREATED:", session.id);
 
-  await createAuditLog({
-    actorUserId: user.id,
-    targetUserId: user.id,
-    action: "USER_LOGIN",
-    metadata: {
-      method: "password",
-      identifierType: isEmail
-        ? "email"
-        : "mobile",
-      name: user.name,
-      email: user.email,
-      mobile: user.mobile,
-      role: user.role,
-    },
+/* =======================================================
+   TOKEN
+======================================================= */
+
+const token =
+  generateToken({
+    userId: user.id,
+    role: user.role,
+    sessionId: session.id,
   });
 
   /* =======================================================
@@ -202,6 +372,9 @@ export const loginUser = async (input: LoginInput) => {
 
   return {
     token,
+
+    sessionId: session.id,
+
     user: {
       id: user.id,
       email: user.email,
@@ -221,7 +394,9 @@ export const registerUser = async (
   input: RegisterInput,
 ) => {
   const email = input.email
-    ? input.email.trim().toLowerCase()
+    ? input.email
+        .trim()
+        .toLowerCase()
     : undefined;
 
   const mobile = input.mobile
@@ -248,6 +423,7 @@ export const registerUser = async (
         where: {
           email,
         },
+
         select: {
           id: true,
         },
@@ -270,6 +446,7 @@ export const registerUser = async (
         where: {
           mobile,
         },
+
         select: {
           id: true,
         },
@@ -286,82 +463,69 @@ export const registerUser = async (
      PASSWORD HASH
   ------------------------------------------------------- */
 
-  const passwordHash = await bcrypt.hash(
-    input.password,
-    12,
-  );
+  const passwordHash =
+    await bcrypt.hash(
+      input.password,
+      12,
+    );
 
   /* -------------------------------------------------------
      CREATE USER
   ------------------------------------------------------- */
 
-  const user = await prisma.user.create({
-    data: {
-      name: input.name.trim(),
-      email,
-      mobile,
-      passwordHash,
+  const user =
+    await prisma.user.create({
+      data: {
+        name: input.name.trim(),
 
-      /*
-       * Public registration can ONLY create
-       * normal USER accounts.
-       *
-       * Never accept role from frontend.
-       */
-      role: "USER",
-      isDisabled: false,
+        email,
 
-      /*
-       * DOB
-       */
-      dateOfBirth: input.dateOfBirth
-        ? new Date(
-            `${input.dateOfBirth}T00:00:00`,
-          )
-        : null,
+        mobile,
 
-      /*
-       * Gender
-       */
-      gender: input.gender || null,
-    },
-  });
+        passwordHash,
 
-  /* -------------------------------------------------------
-     AUDIT — USER REGISTERED
-  ------------------------------------------------------- */
+        /*
+         * Public registration can ONLY create
+         * normal USER accounts.
+         */
+        role: "USER",
 
-  await createAuditLog({
-    actorUserId: user.id,
-    targetUserId: user.id,
-    action: "USER_REGISTERED",
-    metadata: {
-      method: "password",
-      name: user.name,
-      email: user.email,
-      mobile: user.mobile,
-      role: user.role,
-    },
-  });
+        isDisabled: false,
+
+        dateOfBirth:
+          input.dateOfBirth
+            ? new Date(
+                `${input.dateOfBirth}T00:00:00`,
+              )
+            : null,
+
+        gender:
+          input.gender || null,
+      },
+    });
+
+  /*
+   * IMPORTANT:
+   *
+   * ACCOUNT_REGISTERED is now created
+   * by auth.controller.ts.
+   *
+   * We do NOT create another audit event here.
+   */
 
   /* -------------------------------------------------------
      AUTO LOGIN
-     
-     User is automatically logged in after registration,
-     but this is NOT recorded as USER_LOGIN.
   ------------------------------------------------------- */
 
-  const token = generateToken({
-    userId: user.id,
-    role: user.role,
-  });
-
-  /* -------------------------------------------------------
-     RESPONSE
-  ------------------------------------------------------- */
+  const token =
+    generateToken({
+      userId: user.id,
+      role: user.role,
+    });
 
   return {
     token,
+
     user: {
       id: user.id,
       email: user.email,

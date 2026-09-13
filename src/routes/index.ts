@@ -25,7 +25,6 @@ import { PERMISSIONS } from "../config/permissions";
 import adminManagementRoutes from "./admin-management.routes";
 import adminUserRoutes from "./admin-user.routes";
 import adminSettingsRoutes from "./admin-settings.routes";
-import adminAuditRoutes from "./admin-audit.routes";
 import reviewRoutes from "./review.routes";
 import adminCategoryRoutes from "./admin-category.routes";
 import adminBrandRoutes from "./admin-brand.routes";
@@ -35,6 +34,7 @@ import userRoutes from "./user.routes";
 import favoriteRoutes from "./favorite.routes";
 import { getMyProfileHistory } from "../controllers/profile-history.controller";
 import accountRoutes from "../modules/account/account.routes";
+import adminAuditRoutes from "./admin-audit.routes";
 
 
 const router = Router();

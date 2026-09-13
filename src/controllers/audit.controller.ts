@@ -613,3 +613,94 @@ export const exportAuditLogs = async (
     });
   }
 };
+
+
+export const getAllUserSessions = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const page = Math.max(
+      Number(req.query.page) || 1,
+      1,
+    );
+
+    const limit = Math.min(
+      Math.max(
+        Number(req.query.limit) || 50,
+        1,
+      ),
+      100,
+    );
+
+    const skip = (page - 1) * limit;
+
+    const [
+      sessions,
+      total,
+    ] = await Promise.all([
+      prisma.userSession.findMany({
+        skip,
+        take: limit,
+        orderBy: {
+          startedAt: "desc",
+        },
+        select: {
+          id: true,
+          userId: true,
+          startedAt: true,
+          lastSeenAt: true,
+          endedAt: true,
+          isActive: true,
+          deviceType: true,
+          browser: true,
+          operatingSystem: true,
+          ipAddress: true,
+          userAgent: true,
+          country: true,
+          state: true,
+          city: true,
+          timezone: true,
+
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              mobile: true,
+              role: true,
+              isDisabled: true,
+              isDeleted: true,
+            },
+          },
+        },
+      }),
+
+      prisma.userSession.count(),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: sessions,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(
+          total / limit,
+        ),
+      },
+    });
+  } catch (error) {
+    console.error(
+      "Get all user sessions failed:",
+      error,
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to load user sessions",
+    });
+  }
+};

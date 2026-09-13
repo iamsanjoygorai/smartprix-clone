@@ -17,6 +17,12 @@ import {
   deleteUser,
 } from "../services/user.service";
 import { createAuditLog } from "../services/audit.service";
+import {
+  AUDIT_ACTIONS,
+  AUDIT_CATEGORIES,
+} from "../modules/audit/audit.constants";
+import { buildAuditChanges } from "../modules/audit/audit-change";
+
 
 /* =========================================================
    UPDATE PROFILE
@@ -161,33 +167,50 @@ export const updateProfile = async (
       `${dateOfBirth}T00:00:00`,
     );
 
-    const changedFields: string[] = [];
-
-if (currentUser.name !== name) {
-  changedFields.push("name");
-}
-
-if (currentUser.email !== email) {
-  changedFields.push("email");
-}
-
-if (currentUser.mobile !== mobile) {
-  changedFields.push("mobile");
-}
-
-const currentDob = currentUser.dateOfBirth
+    const currentDob = currentUser.dateOfBirth
   ? currentUser.dateOfBirth.toISOString().slice(0, 10)
   : null;
 
 const newDob = dateOfBirth || null;
 
-if (currentDob !== newDob) {
-  changedFields.push("dateOfBirth");
-}
-
-if (currentUser.gender !== gender) {
-  changedFields.push("gender");
-}
+const changes = buildAuditChanges(
+  {
+    name: currentUser.name,
+    email: currentUser.email,
+    mobile: currentUser.mobile,
+    dateOfBirth: currentDob,
+    gender: currentUser.gender,
+  },
+  {
+    name,
+    email,
+    mobile,
+    dateOfBirth: newDob,
+    gender,
+  },
+  [
+    {
+      key: "name",
+      label: "Name",
+    },
+    {
+      key: "email",
+      label: "Email",
+    },
+    {
+      key: "mobile",
+      label: "Mobile",
+    },
+    {
+      key: "dateOfBirth",
+      label: "Date of Birth",
+    },
+    {
+      key: "gender",
+      label: "Gender",
+    },
+  ],
+);
 
     if (Number.isNaN(parsedDate.getTime())) {
       res.status(400).json({
@@ -228,17 +251,30 @@ if (currentUser.gender !== gender) {
       },
     });
 
-    if (changedFields.length > 0) {
+    if (changes.length > 0) {
   await createAuditLog({
     actorUserId: userId,
     targetUserId: userId,
-    action: "PROFILE_UPDATED",
+    action: AUDIT_ACTIONS.PROFILE_UPDATED,
+    category: AUDIT_CATEGORIES.PROFILE,
+    entityType: "User",
+    entityId: userId,
+    description: "User profile information was updated.",
     metadata: {
-      changedFields,
+      changes,
     },
+    sessionId: req.user.sessionId ?? null,
+    ipAddress:
+      req.ip ||
+      req.headers["x-forwarded-for"]
+        ?.toString()
+        .split(",")[0]
+        .trim() ||
+      null,
+    userAgent:
+      req.headers["user-agent"]?.toString() || null,
   });
 }
-
     /* -------------------------------------------------------
        RESPONSE
     ------------------------------------------------------- */
@@ -575,15 +611,30 @@ export const uploadProfileImage = async (
     ======================================================= */
 
     await createAuditLog({
-      actorUserId: userId,
-      targetUserId: userId,
-      action: "PROFILE_IMAGE_UPDATED",
-      metadata: {
-        hadPreviousImage:
-          Boolean(currentUser.profileImageUrl),
-        profileImageUrl,
-      },
-    });
+  actorUserId: userId,
+  targetUserId: userId,
+  action: AUDIT_ACTIONS.PROFILE_IMAGE_UPLOADED,
+  category: AUDIT_CATEGORIES.PROFILE,
+  entityType: "User",
+  entityId: userId,
+  description: currentUser.profileImageUrl
+    ? "User profile picture was replaced."
+    : "User profile picture was uploaded.",
+  metadata: {
+    hadPreviousImage:
+      Boolean(currentUser.profileImageUrl),
+  },
+  sessionId: req.user.sessionId ?? null,
+  ipAddress:
+    req.ip ||
+    req.headers["x-forwarded-for"]
+      ?.toString()
+      .split(",")[0]
+      .trim() ||
+    null,
+  userAgent:
+    req.headers["user-agent"]?.toString() || null,
+});
 
     /* -------------------------------------------------------
        RESPONSE
@@ -743,14 +794,27 @@ export const deleteProfileImage = async (
     ======================================================= */
 
     await createAuditLog({
-      actorUserId: userId,
-      targetUserId: userId,
-      action: "PROFILE_IMAGE_DELETED",
-      metadata: {
-        profileImageUrl:
-          currentUser.profileImageUrl,
-      },
-    });
+  actorUserId: userId,
+  targetUserId: userId,
+  action: AUDIT_ACTIONS.PROFILE_IMAGE_DELETED,
+  category: AUDIT_CATEGORIES.PROFILE,
+  entityType: "User",
+  entityId: userId,
+  description: "User profile picture was deleted.",
+  metadata: {
+    hadProfileImage: true,
+  },
+  sessionId: req.user.sessionId ?? null,
+  ipAddress:
+    req.ip ||
+    req.headers["x-forwarded-for"]
+      ?.toString()
+      .split(",")[0]
+      .trim() ||
+    null,
+  userAgent:
+    req.headers["user-agent"]?.toString() || null,
+});
 
     /* -------------------------------------------------------
        RESPONSE
@@ -1158,6 +1222,29 @@ export const changePassword = async (
         resetPasswordExpiresAt: null,
       },
     });
+
+    await createAuditLog({
+  actorUserId: userId,
+  targetUserId: userId,
+  action: AUDIT_ACTIONS.PASSWORD_CHANGED,
+  category: AUDIT_CATEGORIES.SECURITY,
+  entityType: "User",
+  entityId: userId,
+  description: "User password was changed successfully.",
+  metadata: {
+    method: "current_password",
+  },
+  sessionId: req.user.sessionId ?? null,
+  ipAddress:
+    req.ip ||
+    req.headers["x-forwarded-for"]
+      ?.toString()
+      .split(",")[0]
+      .trim() ||
+    null,
+  userAgent:
+    req.headers["user-agent"]?.toString() || null,
+});
 
     /* -------------------------------------------------------
        RESPONSE

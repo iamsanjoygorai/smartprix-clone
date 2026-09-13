@@ -1,6 +1,10 @@
-import prisma from "../db/prisma";
+import {
+  createAuditLog as createCentralAuditLog,
+} from "../modules/audit/audit.service";
 
-interface CreateAuditLogInput {
+import type { AuditLogInput } from "../modules/audit/audit.types";
+
+interface LegacyCreateAuditLogInput {
   actorUserId: string;
   targetUserId?: string;
   action: string;
@@ -12,13 +16,12 @@ export const createAuditLog = async ({
   targetUserId,
   action,
   metadata,
-}: CreateAuditLogInput) => {
-  return prisma.auditLog.create({
-    data: {
-      actorUserId,
-      targetUserId: targetUserId ?? null,
-      action,
-      metadata: metadata ?? {},
-    },
+}: LegacyCreateAuditLogInput) => {
+  return createCentralAuditLog({
+    actorUserId,
+    targetUserId,
+    action: action as AuditLogInput["action"],
+    category: "SYSTEM",
+    metadata: metadata ?? {},
   });
 };

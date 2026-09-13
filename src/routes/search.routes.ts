@@ -1,6 +1,11 @@
 import { Router } from "express";
-import { searchSuggestions, recordSearch } from "../controllers/search.controller";
 
+import {
+  searchSuggestions,
+  recordSearch,
+} from "../controllers/search.controller";
+
+import { requireAuth } from "../middlewares/auth.middleware";
 
 const router = Router();
 
@@ -9,14 +14,16 @@ const router = Router();
  */
 router.get(
   "/suggestions",
-  searchSuggestions
+  searchSuggestions,
 );
 
-
+/*
+ * POST /api/search/record
+ */
 router.post(
-  "/search/record",
+  "/record",
+  requireAuth,
   recordSearch,
 );
-
 
 export default router;

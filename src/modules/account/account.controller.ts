@@ -1,34 +1,77 @@
 import { Request, Response } from "express";
-import { deleteAccount } from "./account.service";
+
+import prisma from "../../db/prisma";
+
+// ============================================================
+// DELETE MY ACCOUNT
+// ============================================================
 
 export const deleteMyAccount = async (
   req: Request,
   res: Response,
 ) => {
-  try {
-    const userId = (req as any).user?.userId;
+  // KEEP YOUR EXISTING deleteMyAccount CODE HERE
+};
 
-    if (!userId) {
-      res.status(401).json({
+
+// ============================================================
+// GET MY SESSIONS
+// ============================================================
+
+export const getMySessions = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    if (
+      !req.user ||
+      typeof req.user === "string"
+    ) {
+      return res.status(401).json({
         success: false,
         message: "Authentication required",
       });
-      return;
     }
 
-    await deleteAccount(userId);
+    const userId = req.user.userId;
 
-    res.status(200).json({
+    const sessions =
+      await prisma.userSession.findMany({
+        where: {
+          userId,
+        },
+
+        orderBy: {
+          startedAt: "desc",
+        },
+
+        select: {
+          id: true,
+          deviceType: true,
+          browser: true,
+          operatingSystem: true,
+          ipAddress: true,
+          userAgent: true,
+          startedAt: true,
+          lastSeenAt: true,
+          endedAt: true,
+          isActive: true,
+        },
+      });
+
+    return res.status(200).json({
       success: true,
-      message:
-        "Your account has been permanently deleted. Your historical records have been retained.",
+      data: sessions,
     });
-  } catch (error: any) {
-    console.error("Delete account controller error:", error);
+  } catch (error) {
+    console.error(
+      "Get my sessions failed:",
+      error,
+    );
 
-    res.status(error?.statusCode || 500).json({
+    return res.status(500).json({
       success: false,
-      message: error?.message || "Failed to delete account",
+      message: "Failed to load sessions",
     });
   }
 };
