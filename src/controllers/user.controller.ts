@@ -22,6 +22,7 @@ import {
   AUDIT_CATEGORIES,
 } from "../modules/audit/audit.constants";
 import { buildAuditChanges } from "../modules/audit/audit-change";
+import { getAuditRequestContext } from "../modules/audit/audit.context";
 
 
 /* =========================================================
@@ -252,27 +253,28 @@ const changes = buildAuditChanges(
     });
 
     if (changes.length > 0) {
+  const auditContext = getAuditRequestContext(req);
+
   await createAuditLog({
-    actorUserId: userId,
+    actorUserId: auditContext.userId,
     targetUserId: userId,
+
     action: AUDIT_ACTIONS.PROFILE_UPDATED,
     category: AUDIT_CATEGORIES.PROFILE,
+
     entityType: "User",
     entityId: userId,
+
     description: "User profile information was updated.",
+
     metadata: {
       changes,
     },
-    sessionId: req.user.sessionId ?? null,
-    ipAddress:
-      req.ip ||
-      req.headers["x-forwarded-for"]
-        ?.toString()
-        .split(",")[0]
-        .trim() ||
-      null,
-    userAgent:
-      req.headers["user-agent"]?.toString() || null,
+
+    sessionId: auditContext.sessionId,
+    ipAddress: auditContext.ipAddress,
+    userAgent: auditContext.userAgent,
+    timezone: auditContext.timezone,
   });
 }
     /* -------------------------------------------------------

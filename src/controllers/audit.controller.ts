@@ -408,19 +408,20 @@ export const getAuditLogs = async (
             ),
         },
       },
-    });
+    }); 
   } catch (error) {
-    console.error(
-      "Get audit logs error:",
-      error,
-    );
+  console.error("========== GET AUDIT LOGS ERROR ==========");
+  console.error(error);
+  console.error("==========================================");
 
-    return res.status(500).json({
-      success: false,
-      message:
-        "Failed to fetch audit logs",
-    });
-  }
+  return res.status(500).json({
+    success: false,
+    message:
+      error instanceof Error
+        ? error.message
+        : "Failed to fetch audit logs",
+  });
+}
 };
 
 /* =========================================================

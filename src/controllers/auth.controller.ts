@@ -78,9 +78,14 @@ function getAuditRequestInfo(req: Request) {
 
     userAgent:
       req.get("user-agent") || null,
+
+    timezone:
+      req.get("x-timezone") ||
+      (typeof req.body?.timezone === "string"
+        ? req.body.timezone
+        : null),
   };
 }
-
 /**
  * Detect the login method without storing the actual credential.
  */

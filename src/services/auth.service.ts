@@ -92,17 +92,25 @@ function detectOperatingSystem(
 function getSessionInfo(
   req?: {
     ip?: string;
+
     headers?: {
-      [key: string]: string | string[] | undefined;
+      [key: string]:
+        | string
+        | string[]
+        | undefined;
     };
+
     socket?: {
       remoteAddress?: string;
+    };
+
+    body?: {
+      timezone?: string | null;
     };
   },
 ) {
   const userAgent =
-    typeof req?.headers?.["user-agent"] ===
-    "string"
+    typeof req?.headers?.["user-agent"] === "string"
       ? req.headers["user-agent"]
       : "";
 
@@ -110,6 +118,26 @@ function getSessionInfo(
     req?.ip ||
     req?.socket?.remoteAddress ||
     null;
+
+  const headerTimezone =
+    typeof req?.headers?.["x-timezone"] === "string"
+      ? req.headers["x-timezone"]
+      : null;
+
+  const bodyTimezone =
+    typeof req?.body?.timezone === "string"
+      ? req.body.timezone
+      : null;
+
+  const timezone =
+    headerTimezone ||
+    bodyTimezone ||
+    null;
+
+  console.log(
+    "AUTH SERVICE TIMEZONE:",
+    timezone,
+  );
 
   return {
     ipAddress,
@@ -126,6 +154,8 @@ function getSessionInfo(
     operatingSystem: userAgent
       ? detectOperatingSystem(userAgent)
       : null,
+
+    timezone,
   };
 }
 
@@ -350,7 +380,10 @@ const session =
 
       userAgent:
         sessionInfo.userAgent,
-    },
+
+      timezone:
+        sessionInfo.timezone,
+      },
   });
 
   console.log("USER SESSION CREATED:", session.id);
