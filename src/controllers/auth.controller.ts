@@ -134,6 +134,30 @@ function getLoginMethod(data: unknown): string {
   return "unknown";
 }
 
+const AUTH_COOKIE_NAME = "smartprix_auth";
+
+function setAuthCookie(
+  res: Response,
+  token: string,
+) {
+
+  /* =======================================================
+   END CURRENT SESSION
+======================================================= */
+
+ 
+  res.cookie(AUTH_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite:
+      process.env.NODE_ENV === "production"
+        ? "none"
+        : "lax",
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+    path: "/",
+  });
+}
+
 
 /* =========================================================
    REGISTER
@@ -357,6 +381,15 @@ export const login = async (
       req,
     );
 
+    if (
+  data &&
+  typeof data === "object" &&
+  "token" in data &&
+  typeof data.token === "string"
+) {
+  setAuthCookie(res, data.token);
+}
+
     console.log(
       "LOGIN SESSION ID:",
       data.sessionId,
@@ -536,31 +569,30 @@ export const logout = async (
 ) => {
   try {
     const authUser =
-  typeof req.user === "object" &&
-  req.user !== null
-    ? req.user
-    : null;
+      typeof req.user === "object" &&
+      req.user !== null
+        ? req.user
+        : null;
 
-const userId =
-  authUser &&
-  "userId" in authUser &&
-  typeof authUser.userId === "string"
-    ? authUser.userId
-    : null;
+    const userId =
+      authUser &&
+      "userId" in authUser &&
+      typeof authUser.userId === "string"
+        ? authUser.userId
+        : null;
 
-const sessionId =
-  authUser &&
-  "sessionId" in authUser &&
-  typeof authUser.sessionId === "string"
-    ? authUser.sessionId
-    : null;
+    const sessionId =
+      authUser &&
+      "sessionId" in authUser &&
+      typeof authUser.sessionId === "string"
+        ? authUser.sessionId
+        : null;
 
     if (!userId) {
       res.status(401).json({
         success: false,
         message: "Authentication required",
       });
-
       return;
     }
 
@@ -578,7 +610,6 @@ const sessionId =
           userId,
           isActive: true,
         },
-
         data: {
           isActive: false,
           endedAt: new Date(),
@@ -588,31 +619,39 @@ const sessionId =
     }
 
     /* =======================================================
+       CLEAR AUTHENTICATION COOKIE
+    ======================================================= */
+
+    res.clearCookie(AUTH_COOKIE_NAME, {
+      httpOnly: true,
+      secure:
+        process.env.NODE_ENV === "production",
+      sameSite:
+        process.env.NODE_ENV === "production"
+          ? "none"
+          : "lax",
+      path: "/",
+    });
+
+    /* =======================================================
        AUDIT — LOGOUT
     ======================================================= */
 
     await createAuditLog({
       actorUserId: userId,
       targetUserId: userId,
-
       action: AUDIT_ACTIONS.LOGOUT,
       category: AUDIT_CATEGORIES.AUTH,
-
       entityType: "User",
       entityId: userId,
-
       sessionId: sessionId ?? null,
-
       description:
         "User logged out successfully.",
-
       metadata: {
         sessionEnded: Boolean(sessionId),
       },
-
       ipAddress:
         auditRequest.ipAddress,
-
       userAgent:
         auditRequest.userAgent,
     });
@@ -624,33 +663,23 @@ const sessionId =
     await historyService.record({
       actorUserId: userId,
       targetUserId: userId,
-
       category:
         HISTORY_CATEGORY.SECURITY,
-
       eventType:
         HISTORY_EVENTS.LOGOUT,
-
       operation:
         HISTORY_OPERATION.LOGOUT,
-
       entityType: "User",
       entityId: userId,
-
       title: "User logged out",
-
       description:
         "User successfully logged out.",
-
       sessionId:
         sessionId ?? null,
-
       ipAddress:
         auditRequest.ipAddress,
-
       userAgent:
         auditRequest.userAgent,
-
       metadata: {
         sessionEnded:
           Boolean(sessionId),

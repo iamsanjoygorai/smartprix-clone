@@ -25,8 +25,20 @@ const envSchema = z.object({
     .min(32, "JWT_SECRET must be at least 32 characters"),
 
   JWT_EXPIRES_IN: z
-    .string()
-    .default("1d"),
+  .string()
+  .default("1d"),
+
+JWT_USER_EXPIRES_IN: z
+  .string()
+  .default("30d"),
+
+JWT_ADMIN_EXPIRES_IN: z
+  .string()
+  .default("7d"),
+
+JWT_SUPER_ADMIN_EXPIRES_IN: z
+  .string()
+  .default("1d"),
 
   SMTP_HOST: z
     .string()

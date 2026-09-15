@@ -12,6 +12,8 @@ import prisma from "../db/prisma";
 
 import type { JwtPayload } from "../config/jwt";
 
+const AUTH_COOKIE_NAME = "smartprix_auth";
+
 export const requireAuth = async (
   req: Request,
   res: Response,
@@ -19,33 +21,36 @@ export const requireAuth = async (
 ) => {
   try {
     /* =====================================================
-       AUTHORIZATION HEADER
+       GET TOKEN
+
+       Priority:
+       1. HttpOnly authentication cookie
+       2. Authorization Bearer token (temporary fallback)
     ===================================================== */
+
+    const cookieToken =
+      req.cookies?.[AUTH_COOKIE_NAME];
 
     const authorization =
       req.headers.authorization;
 
-    if (
-      !authorization ||
-      !authorization.startsWith("Bearer ")
-    ) {
-      res.status(401).json({
-        success: false,
-        message: "Authentication required",
-      });
-
-      return;
-    }
+    const bearerToken =
+      authorization &&
+      authorization.startsWith("Bearer ")
+        ? authorization.split(" ")[1]
+        : null;
 
     const token =
-      authorization.split(" ")[1];
+      typeof cookieToken === "string" &&
+      cookieToken.trim()
+        ? cookieToken
+        : bearerToken;
 
     if (!token) {
       res.status(401).json({
         success: false,
         message: "Authentication required",
       });
-
       return;
     }
 
@@ -53,11 +58,10 @@ export const requireAuth = async (
        VERIFY TOKEN
     ===================================================== */
 
-    const decoded =
-      jwt.verify(
-        token,
-        env.JWT_SECRET,
-      );
+    const decoded = jwt.verify(
+      token,
+      env.JWT_SECRET,
+    );
 
     if (
       typeof decoded !== "object" ||
@@ -66,23 +70,18 @@ export const requireAuth = async (
     ) {
       res.status(401).json({
         success: false,
-        message:
-          "Invalid authentication token",
+        message: "Invalid authentication token",
       });
-
       return;
     }
 
-    const payload =
-      decoded as JwtPayload;
+    const payload = decoded as JwtPayload;
 
     if (!payload.userId) {
       res.status(401).json({
         success: false,
-        message:
-          "Invalid authentication token",
+        message: "Invalid authentication token",
       });
-
       return;
     }
 
@@ -95,7 +94,6 @@ export const requireAuth = async (
         where: {
           id: payload.userId,
         },
-
         select: {
           id: true,
           role: true,
@@ -109,7 +107,6 @@ export const requireAuth = async (
         success: false,
         message: "User not found",
       });
-
       return;
     }
 
@@ -123,7 +120,6 @@ export const requireAuth = async (
         message:
           "This account has been permanently deleted",
       });
-
       return;
     }
 
@@ -136,18 +132,17 @@ export const requireAuth = async (
         success: false,
         message: "Account is disabled",
       });
-
       return;
     }
 
     /* =====================================================
        SESSION VALIDATION
-       
-       Old JWTs may not contain sessionId.
-       They remain valid.
-       
-       New JWTs contain sessionId and must belong
-       to this user and be active.
+
+       New JWTs contain sessionId.
+
+       The session must:
+       - belong to this user
+       - still be active
     ===================================================== */
 
     if (payload.sessionId) {
@@ -158,7 +153,6 @@ export const requireAuth = async (
             userId: user.id,
             isActive: true,
           },
-
           select: {
             id: true,
           },
@@ -170,19 +164,17 @@ export const requireAuth = async (
           message:
             "Session expired or logged out",
         });
-
         return;
       }
 
       /* ---------------------------------------------------
-         Update last activity
+         UPDATE LAST ACTIVITY
       --------------------------------------------------- */
 
       await prisma.userSession.update({
         where: {
           id: session.id,
         },
-
         data: {
           lastSeenAt: new Date(),
         },
@@ -197,8 +189,8 @@ export const requireAuth = async (
       ...payload,
 
       /*
-       * Use the current database role.
-       * This prevents a stale JWT role from being trusted.
+       * Always use the current database role.
+       * Never trust a stale JWT role.
        */
       role: user.role,
     };
@@ -212,8 +204,7 @@ export const requireAuth = async (
 
     res.status(401).json({
       success: false,
-      message:
-        "Invalid or expired token",
+      message: "Invalid or expired token",
     });
   }
 };
