@@ -18,6 +18,12 @@ import {
   AUDIT_CATEGORIES,
 } from "../modules/audit/audit.constants";
 import { buildAuditChanges } from "../modules/audit/audit-change";
+import historyService from "../modules/history/history.service";
+import {
+  HISTORY_CATEGORY,
+  HISTORY_EVENTS,
+  HISTORY_OPERATION,
+} from "../modules/history/history.constants";
 
 /* =========================================================
    HELPERS
@@ -128,6 +134,154 @@ function getLoginMethod(data: unknown): string {
   return "unknown";
 }
 
+
+/* =========================================================
+   REGISTER
+========================================================= */
+
+export const register = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    /* -------------------------------------------------------
+       VALIDATION
+    ------------------------------------------------------- */
+
+    const result = registerSchema.safeParse(req.body);
+
+    if (!result.success) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid registration data",
+        errors: result.error.flatten(),
+      });
+      return;
+    }
+
+    const input = result.data;
+
+    /* -------------------------------------------------------
+       CREATE USER
+    ------------------------------------------------------- */
+
+    const resultUser = await registerUser(input);
+
+    const user = resultUser.user;
+
+    /* -------------------------------------------------------
+       REQUEST INFO
+    ------------------------------------------------------- */
+
+    const auditRequest = getAuditRequestInfo(req);
+
+    /* -------------------------------------------------------
+       AUDIT LOG
+    ------------------------------------------------------- */
+
+    await createAuditLog({
+      actorUserId: user.id,
+      targetUserId: user.id,
+      action: "ACCOUNT_REGISTERED",
+      category: AUDIT_CATEGORIES.AUTH,
+      entityType: "User",
+      entityId: user.id,
+      description: "A new user account was registered.",
+      metadata: {
+        method: input.email
+          ? "email"
+          : "mobile",
+      },
+      ipAddress: auditRequest.ipAddress,
+      userAgent: auditRequest.userAgent,
+    });
+
+    /* -------------------------------------------------------
+       GIT-LIKE HISTORY
+    ------------------------------------------------------- */
+
+    await historyService.record({
+      actorUserId: user.id,
+      targetUserId: user.id,
+
+      category: HISTORY_CATEGORY.USER,
+
+      eventType: HISTORY_EVENTS.USER_CREATED,
+
+      operation: HISTORY_OPERATION.CREATE,
+
+      entityType: "User",
+      entityId: user.id,
+
+      title: "Account created",
+
+      description:
+        "A new user account was created through public registration.",
+
+      changes: {
+        name: {
+          before: null,
+          after: user.name,
+        },
+
+        email: {
+          before: null,
+          after: user.email,
+        },
+
+        mobile: {
+          before: null,
+          after: user.mobile,
+        },
+
+        role: {
+          before: null,
+          after: user.role,
+        },
+      },
+
+      metadata: {
+        method: input.email
+          ? "email"
+          : "mobile",
+      },
+    });
+
+    /* -------------------------------------------------------
+       RESPONSE
+    ------------------------------------------------------- */
+
+    res.status(201).json({
+      success: true,
+      message: "Registration successful",
+      data: resultUser,
+    });
+  } catch (error) {
+    console.error("Registration failed:", error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Registration failed";
+
+    if (
+      message === "Email already registered" ||
+      message === "Mobile number already registered"
+    ) {
+      res.status(409).json({
+        success: false,
+        message,
+      });
+      return;
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Registration failed",
+    });
+  }
+};
+
 /* =========================================================
    LOGIN
 ========================================================= */
@@ -143,6 +297,10 @@ export const login = async (
       req.body,
     );
 
+    /* =======================================================
+       INVALID LOGIN DATA
+    ======================================================= */
+
     if (!result.success) {
       await createAuditLog({
         action: AUDIT_ACTIONS.LOGIN_FAILED,
@@ -155,60 +313,114 @@ export const login = async (
           reason: "INVALID_LOGIN_DATA",
         },
 
-        ipAddress:
-          auditRequest.ipAddress,
+        ipAddress: auditRequest.ipAddress,
+        userAgent: auditRequest.userAgent,
+      });
 
-        userAgent:
-          auditRequest.userAgent,
+      /* =======================================================
+         HISTORY — LOGIN FAILED
+      ======================================================= */
+
+      await historyService.record({
+        category: HISTORY_CATEGORY.SECURITY,
+        eventType: HISTORY_EVENTS.LOGIN_FAILED,
+        operation: HISTORY_OPERATION.LOGIN,
+
+        title: "Login attempt failed",
+
+        description:
+          "Login failed because the submitted login data was invalid.",
+
+        metadata: {
+          reason: "INVALID_LOGIN_DATA",
+        },
+
+        ipAddress: auditRequest.ipAddress,
+        userAgent: auditRequest.userAgent,
       });
 
       res.status(400).json({
         success: false,
         message: "Invalid login data",
-        errors:
-          result.error.flatten().fieldErrors,
+        errors: result.error.flatten().fieldErrors,
       });
 
       return;
     }
 
+    /* =======================================================
+       LOGIN
+    ======================================================= */
+
     const data = await loginUser(
-  result.data,
-  req,
-);
-console.log("LOGIN SESSION ID:", data.sessionId);
+      result.data,
+      req,
+    );
+
+    console.log(
+      "LOGIN SESSION ID:",
+      data.sessionId,
+    );
 
     const userId = extractUserId(data);
 
+    /* =======================================================
+       AUDIT — LOGIN SUCCESS
+    ======================================================= */
+
     await createAuditLog({
-  actorUserId: userId,
-  targetUserId: userId,
+      actorUserId: userId,
+      targetUserId: userId,
 
-  action: AUDIT_ACTIONS.LOGIN_SUCCESS,
-  category: AUDIT_CATEGORIES.AUTH,
+      action: AUDIT_ACTIONS.LOGIN_SUCCESS,
+      category: AUDIT_CATEGORIES.AUTH,
 
-  entityType: "User",
-  entityId: userId,
+      entityType: "User",
+      entityId: userId,
 
-  sessionId:
-    typeof data.sessionId === "string"
-      ? data.sessionId
-      : null,
+      sessionId:
+        typeof data.sessionId === "string"
+          ? data.sessionId
+          : null,
 
-  description:
-    "User logged in successfully.",
+      description:
+        "User logged in successfully.",
 
-  metadata: {
-    method:
-      getLoginMethod(result.data),
-  },
+      metadata: {
+        method: getLoginMethod(result.data),
+      },
 
-  ipAddress:
-    auditRequest.ipAddress,
+      ipAddress: auditRequest.ipAddress,
+      userAgent: auditRequest.userAgent,
+    });
 
-  userAgent:
-    auditRequest.userAgent,
-});
+    /* =======================================================
+       HISTORY — LOGIN SUCCESS
+    ======================================================= */
+
+    await historyService.record({
+      actorUserId: userId,
+      targetUserId: userId,
+
+      ipAddress: auditRequest.ipAddress,
+      userAgent: auditRequest.userAgent,
+
+      category: HISTORY_CATEGORY.SECURITY,
+      eventType: HISTORY_EVENTS.LOGIN,
+      operation: HISTORY_OPERATION.LOGIN,
+
+      entityType: "User",
+      entityId: userId,
+
+      title: "User logged in",
+
+      description:
+        "User successfully logged in.",
+
+      metadata: {
+        method: getLoginMethod(result.data),
+      },
+    });
 
     res.status(200).json({
       success: true,
@@ -253,15 +465,11 @@ console.log("LOGIN SESSION ID:", data.sessionId);
               ? "ACCOUNT_DISABLED"
               : "AUTHENTICATION_ERROR",
 
-        method:
-          getLoginMethod(req.body),
+        method: getLoginMethod(req.body),
       },
 
-      ipAddress:
-        auditRequest.ipAddress,
-
-      userAgent:
-        auditRequest.userAgent,
+      ipAddress: auditRequest.ipAddress,
+      userAgent: auditRequest.userAgent,
     }).catch((auditError) => {
       console.error(
         "Failed to create login audit:",
@@ -269,9 +477,38 @@ console.log("LOGIN SESSION ID:", data.sessionId);
       );
     });
 
+    /* =======================================================
+   HISTORY — AUTHENTICATION FAILURE
+======================================================= */
+
+const failureReason =
+  message === "Invalid email or password"
+    ? "INVALID_CREDENTIALS"
+    : message === "Account is disabled"
+      ? "ACCOUNT_DISABLED"
+      : "AUTHENTICATION_ERROR";
+
+await historyService.record({
+  category: HISTORY_CATEGORY.SECURITY,
+  eventType: HISTORY_EVENTS.LOGIN_FAILED,
+  operation: HISTORY_OPERATION.LOGIN,
+
+  title: "Login attempt failed",
+
+  description:
+    "User login attempt failed during authentication.",
+
+  metadata: {
+    reason: failureReason,
+    method: getLoginMethod(req.body),
+  },
+
+  ipAddress: auditRequest.ipAddress,
+  userAgent: auditRequest.userAgent,
+});
+
     if (
-      message ===
-        "Invalid email or password" ||
+      message === "Invalid email or password" ||
       message === "Account is disabled"
     ) {
       res.status(401).json({
@@ -290,839 +527,6 @@ console.log("LOGIN SESSION ID:", data.sessionId);
 };
 
 /* =========================================================
-   FIREBASE LOGIN
-========================================================= */
-
-export const firebaseLogin = async (
-  req: Request,
-  res: Response,
-) => {
-  const auditRequest = getAuditRequestInfo(req);
-
-  try {
-    const { idToken } = req.body;
-
-    if (
-      typeof idToken !== "string" ||
-      !idToken.trim()
-    ) {
-      await createAuditLog({
-        action: AUDIT_ACTIONS.LOGIN_FAILED,
-        category: AUDIT_CATEGORIES.AUTH,
-
-        description:
-          "Firebase login failed because no ID token was supplied.",
-
-        metadata: {
-          method: "firebase",
-          reason: "MISSING_ID_TOKEN",
-        },
-
-        ipAddress:
-          auditRequest.ipAddress,
-
-        userAgent:
-          auditRequest.userAgent,
-      });
-
-      res.status(400).json({
-        success: false,
-        message:
-          "Firebase ID token is required",
-      });
-
-      return;
-    }
-
-    const data =
-      await loginWithFirebase(idToken);
-
-    const userId =
-      extractUserId(data);
-
-    await createAuditLog({
-      actorUserId: userId,
-      targetUserId: userId,
-
-      action: AUDIT_ACTIONS.LOGIN_SUCCESS,
-      category: AUDIT_CATEGORIES.AUTH,
-
-      description:
-        "User logged in successfully using Firebase authentication.",
-
-      metadata: {
-        method: "firebase",
-      },
-
-      ipAddress:
-        auditRequest.ipAddress,
-
-      userAgent:
-        auditRequest.userAgent,
-    });
-
-    res.status(200).json({
-      success: true,
-      message:
-        "Firebase login successful",
-      data,
-    });
-  } catch (error) {
-    console.error(
-      "Firebase login failed:",
-      error,
-    );
-
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Firebase login failed";
-
-    await createAuditLog({
-      action: AUDIT_ACTIONS.LOGIN_FAILED,
-      category: AUDIT_CATEGORIES.AUTH,
-
-      description:
-        "Firebase authentication failed.",
-
-      metadata: {
-        method: "firebase",
-        reason:
-          message === "Account is disabled"
-            ? "ACCOUNT_DISABLED"
-            : "FIREBASE_AUTHENTICATION_FAILED",
-      },
-
-      ipAddress:
-        auditRequest.ipAddress,
-
-      userAgent:
-        auditRequest.userAgent,
-    }).catch((auditError) => {
-      console.error(
-        "Failed to create Firebase login audit:",
-        auditError,
-      );
-    });
-
-    if (
-      message === "Account is disabled"
-    ) {
-      res.status(401).json({
-        success: false,
-        message,
-      });
-
-      return;
-    }
-
-    res.status(401).json({
-      success: false,
-      message:
-        "Firebase authentication failed",
-    });
-  }
-};
-
-/* =========================================================
-   REGISTER
-========================================================= */
-
-export const register = async (
-  req: Request,
-  res: Response,
-) => {
-  const auditRequest =
-    getAuditRequestInfo(req);
-
-  try {
-    const result =
-      registerSchema.safeParse(
-        req.body,
-      );
-
-    if (!result.success) {
-      res.status(400).json({
-        success: false,
-        message:
-          "Invalid registration data",
-        errors:
-          result.error.flatten().fieldErrors,
-      });
-
-      return;
-    }
-
-    const data =
-      await registerUser(result.data);
-
-    const userId =
-      extractUserId(data);
-
-    await createAuditLog({
-      actorUserId: userId,
-      targetUserId: userId,
-
-      action:
-        AUDIT_ACTIONS.ACCOUNT_REGISTERED,
-
-      category:
-        AUDIT_CATEGORIES.ACCOUNT,
-
-      description:
-        "A new user account was registered.",
-
-      metadata: {
-        method: "standard_registration",
-      },
-
-      ipAddress:
-        auditRequest.ipAddress,
-
-      userAgent:
-        auditRequest.userAgent,
-    });
-
-    res.status(201).json({
-      success: true,
-      message:
-        "Registration successful",
-      data,
-    });
-  } catch (error) {
-    console.error(
-      "Registration failed:",
-      error,
-    );
-
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Registration failed";
-
-    if (
-      message ===
-        "Email already registered" ||
-      message ===
-        "Mobile number already registered"
-    ) {
-      res.status(409).json({
-        success: false,
-        message,
-      });
-
-      return;
-    }
-
-    res.status(500).json({
-      success: false,
-      message:
-        "Registration failed",
-    });
-  }
-};
-
-/* =========================================================
-   GET CURRENT USER
-========================================================= */
-
-export const getMe = async (
-  req: Request,
-  res: Response,
-) => {
-  try {
-    /*
-     * Authentication middleware should attach
-     * the decoded JWT payload to req.user.
-     */
-
-    if (
-      !req.user ||
-      typeof req.user === "string"
-    ) {
-      res.status(401).json({
-        success: false,
-        message:
-          "Authentication required",
-      });
-
-      return;
-    }
-
-    const userId =
-      req.user.userId;
-
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        message:
-          "Invalid authentication token",
-      });
-
-      return;
-    }
-
-    /* -------------------------------------------------------
-       FETCH USER
-    ------------------------------------------------------- */
-
-    const user =
-      await prisma.user.findUnique({
-        where: {
-          id: userId,
-        },
-
-        include: {
-          userRoles: {
-            include: {
-              role: {
-                include: {
-                  permissions: {
-                    include: {
-                      permission: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-
-          userPermissions: {
-            include: {
-              permission: true,
-            },
-          },
-        },
-      });
-
-    if (!user) {
-      res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-
-      return;
-    }
-
-    /* -------------------------------------------------------
-       DISABLED ACCOUNT
-    ------------------------------------------------------- */
-
-    if (user.isDisabled) {
-      res.status(401).json({
-        success: false,
-        message:
-          "Account is disabled",
-      });
-
-      return;
-    }
-
-    /* -------------------------------------------------------
-       ROLE PERMISSIONS
-    ------------------------------------------------------- */
-
-    const effectivePermissions =
-      new Set<string>(
-        user.userRoles.flatMap(
-          (userRole) =>
-            userRole.role.permissions.map(
-              (rolePermission) =>
-                rolePermission.permission
-                  .name,
-            ),
-        ),
-      );
-
-    /* -------------------------------------------------------
-       SUPER ADMIN
-    ------------------------------------------------------- */
-
-    if (
-      user.role === "SUPER_ADMIN"
-    ) {
-      const allPermissions =
-        await prisma.permission.findMany({
-          select: {
-            name: true,
-          },
-        });
-
-      for (
-        const permission of allPermissions
-      ) {
-        effectivePermissions.add(
-          permission.name,
-        );
-      }
-    } else {
-      /* -----------------------------------------------------
-         INDIVIDUAL PERMISSION OVERRIDES
-      ----------------------------------------------------- */
-
-      for (
-        const override of
-          user.userPermissions
-      ) {
-        if (override.allowed) {
-          effectivePermissions.add(
-            override.permission.name,
-          );
-        } else {
-          effectivePermissions.delete(
-            override.permission.name,
-          );
-        }
-      }
-    }
-
-    /* -------------------------------------------------------
-       RESPONSE
-    ------------------------------------------------------- */
-
-    res.status(200).json({
-      success: true,
-
-      data: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        mobile: user.mobile,
-
-        profileImageUrl:
-          user.profileImageUrl,
-
-        dateOfBirth:
-          user.dateOfBirth,
-
-        gender:
-          user.gender,
-
-        role:
-          user.role,
-
-        isDisabled:
-          user.isDisabled,
-
-        createdAt:
-          user.createdAt,
-
-        updatedAt:
-          user.updatedAt,
-
-        permissions:
-          Array.from(
-            effectivePermissions,
-          ),
-      },
-    });
-  } catch (error) {
-    console.error(
-      "Failed to fetch current user:",
-      error,
-    );
-
-    res.status(500).json({
-      success: false,
-      message:
-        "Failed to fetch current user",
-    });
-  }
-};
-
-/* =========================================================
-   UPDATE PROFILE
-========================================================= */
-
-export const updateProfile = async (
-  req: Request,
-  res: Response,
-) => {
-  try {
-    /* -------------------------------------------------------
-       AUTHENTICATION
-    ------------------------------------------------------- */
-
-    if (
-      !req.user ||
-      typeof req.user === "string"
-    ) {
-      res.status(401).json({
-        success: false,
-        message:
-          "Authentication required",
-      });
-
-      return;
-    }
-
-    const userId =
-      req.user.userId;
-
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        message:
-          "Invalid authentication token",
-      });
-
-      return;
-    }
-
-    /* -------------------------------------------------------
-       ACCEPT ONLY PROFILE FIELDS
-    ------------------------------------------------------- */
-
-    const {
-      name,
-      mobile,
-      dateOfBirth,
-      gender,
-    } = req.body;
-
-    /* -------------------------------------------------------
-       VALIDATE NAME
-    ------------------------------------------------------- */
-
-    if (
-      name !== undefined &&
-      name !== null &&
-      typeof name !== "string"
-    ) {
-      res.status(400).json({
-        success: false,
-        message: "Invalid name",
-      });
-
-      return;
-    }
-
-    if (
-      typeof name === "string" &&
-      name.trim().length > 100
-    ) {
-      res.status(400).json({
-        success: false,
-        message: "Name is too long",
-      });
-
-      return;
-    }
-
-    /* -------------------------------------------------------
-       VALIDATE MOBILE
-    ------------------------------------------------------- */
-
-    if (
-      mobile !== undefined &&
-      mobile !== null &&
-      typeof mobile !== "string"
-    ) {
-      res.status(400).json({
-        success: false,
-        message:
-          "Invalid mobile number",
-      });
-
-      return;
-    }
-
-    const cleanMobile =
-      typeof mobile === "string"
-        ? mobile.trim()
-        : mobile;
-
-    if (
-      cleanMobile &&
-      !/^[0-9]{10}$/.test(cleanMobile)
-    ) {
-      res.status(400).json({
-        success: false,
-        message:
-          "Mobile number must contain exactly 10 digits",
-      });
-
-      return;
-    }
-
-    /* -------------------------------------------------------
-       VALIDATE DATE OF BIRTH
-    ------------------------------------------------------- */
-
-    let parsedDateOfBirth:
-      | Date
-      | null
-      | undefined = undefined;
-
-    if (
-      dateOfBirth !== undefined &&
-      dateOfBirth !== null &&
-      dateOfBirth !== ""
-    ) {
-      if (
-        typeof dateOfBirth !== "string"
-      ) {
-        res.status(400).json({
-          success: false,
-          message:
-            "Invalid date of birth",
-        });
-
-        return;
-      }
-
-      const parsedDate =
-        new Date(dateOfBirth);
-
-      if (
-        Number.isNaN(
-          parsedDate.getTime(),
-        )
-      ) {
-        res.status(400).json({
-          success: false,
-          message:
-            "Invalid date of birth",
-        });
-
-        return;
-      }
-
-      parsedDateOfBirth =
-        parsedDate;
-    } else if (
-      dateOfBirth === null ||
-      dateOfBirth === ""
-    ) {
-      parsedDateOfBirth = null;
-    }
-
-    /* -------------------------------------------------------
-       VALIDATE GENDER
-    ------------------------------------------------------- */
-
-    if (
-      gender !== undefined &&
-      gender !== null &&
-      typeof gender !== "string"
-    ) {
-      res.status(400).json({
-        success: false,
-        message: "Invalid gender",
-      });
-
-      return;
-    }
-
-    const cleanGender =
-      typeof gender === "string"
-        ? gender.trim()
-        : gender;
-
-    const allowedGenders = [
-      "MALE",
-      "FEMALE",
-      "OTHER",
-      "PREFER_NOT_TO_SAY",
-    ];
-
-    if (
-      cleanGender &&
-      !allowedGenders.includes(
-        cleanGender.toUpperCase(),
-      )
-    ) {
-      res.status(400).json({
-        success: false,
-        message: "Invalid gender",
-      });
-
-      return;
-    }
-
-    /* -------------------------------------------------------
-       CHECK MOBILE DUPLICATE
-    ------------------------------------------------------- */
-
-    if (cleanMobile) {
-      const existingUser =
-        await prisma.user.findFirst({
-          where: {
-            mobile: cleanMobile,
-
-            NOT: {
-              id: userId,
-            },
-          },
-
-          select: {
-            id: true,
-          },
-        });
-
-      if (existingUser) {
-        res.status(409).json({
-          success: false,
-          message:
-            "Mobile number already registered",
-        });
-
-        return;
-      }
-    }
-
-    /* -------------------------------------------------------
-       GET OLD PROFILE
-       Used only to record what changed.
-    ------------------------------------------------------- */
-
-    const oldUser =
-      await prisma.user.findUnique({
-        where: {
-          id: userId,
-        },
-
-        select: {
-          name: true,
-          mobile: true,
-          dateOfBirth: true,
-          gender: true,
-        },
-      });
-
-    /* -------------------------------------------------------
-       UPDATE USER
-    ------------------------------------------------------- */
-
-    const user =
-      await prisma.user.update({
-        where: {
-          id: userId,
-        },
-
-        data: {
-          ...(name !== undefined && {
-            name:
-              typeof name === "string"
-                ? name.trim() || null
-                : null,
-          }),
-
-          ...(mobile !== undefined && {
-            mobile:
-              cleanMobile || null,
-          }),
-
-          ...(parsedDateOfBirth !==
-            undefined && {
-            dateOfBirth:
-              parsedDateOfBirth,
-          }),
-
-          ...(gender !== undefined && {
-            gender:
-              cleanGender
-                ? cleanGender.toUpperCase()
-                : null,
-          }),
-        },
-
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          mobile: true,
-          dateOfBirth: true,
-          gender: true,
-          role: true,
-          isDisabled: true,
-          profileImageUrl: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-
-    /* -------------------------------------------------------
-       AUDIT PROFILE UPDATE
-    ------------------------------------------------------- */
-
-  const changes = buildAuditChanges(
-  {
-    name: oldUser?.name ?? null,
-    mobile: oldUser?.mobile ?? null,
-    dateOfBirth: oldUser?.dateOfBirth ?? null,
-    gender: oldUser?.gender ?? null,
-  },
-  {
-    name: user.name ?? null,
-    mobile: user.mobile ?? null,
-    dateOfBirth: user.dateOfBirth ?? null,
-    gender: user.gender ?? null,
-  },
-  [
-    {
-      key: "name",
-      label: "Name",
-    },
-    {
-      key: "mobile",
-      label: "Mobile",
-    },
-    {
-      key: "dateOfBirth",
-      label: "Date of Birth",
-    },
-    {
-      key: "gender",
-      label: "Gender",
-    },
-  ],
-);
-
-if (changes.length > 0) {
-  const auditRequest = getAuditRequestInfo(req);
-
-  await createAuditLog({
-    actorUserId: userId,
-    targetUserId: userId,
-    action: AUDIT_ACTIONS.PROFILE_UPDATED,
-    category: AUDIT_CATEGORIES.PROFILE,
-    entityType: "User",
-    entityId: userId,
-    description: "User profile was updated.",
-    metadata: {
-      changes,
-    },
-    ipAddress: auditRequest.ipAddress,
-    userAgent: auditRequest.userAgent,
-  });
-}
-
-    /* -------------------------------------------------------
-       RESPONSE
-    ------------------------------------------------------- */
-
-    res.status(200).json({
-      success: true,
-      message:
-        "Profile updated successfully",
-      data: user,
-    });
-  } catch (error) {
-    console.error(
-      "Failed to update profile:",
-      error,
-    );
-
-    res.status(500).json({
-      success: false,
-      message:
-        "Failed to update profile",
-    });
-  }
-};
-
-/* =========================================================
    LOGOUT
 ========================================================= */
 
@@ -1131,42 +535,41 @@ export const logout = async (
   res: Response,
 ) => {
   try {
-    /* =====================================================
-       AUTH USER
-    ===================================================== */
+    const authUser =
+  typeof req.user === "object" &&
+  req.user !== null
+    ? req.user
+    : null;
 
-    if (
-      !req.user ||
-      typeof req.user === "string"
-    ) {
-      res.status(401).json({
-        success: false,
-        message:
-          "Authentication required",
-      });
+const userId =
+  authUser &&
+  "userId" in authUser &&
+  typeof authUser.userId === "string"
+    ? authUser.userId
+    : null;
 
-      return;
-    }
-
-    const userId =
-      req.user.userId;
-
-    const sessionId =
-      req.user.sessionId;
+const sessionId =
+  authUser &&
+  "sessionId" in authUser &&
+  typeof authUser.sessionId === "string"
+    ? authUser.sessionId
+    : null;
 
     if (!userId) {
       res.status(401).json({
         success: false,
-        message:
-          "Invalid authentication token",
+        message: "Authentication required",
       });
 
       return;
     }
 
-    /* =====================================================
-       END CURRENT USER SESSION
-    ===================================================== */
+    const auditRequest =
+      getAuditRequestInfo(req);
+
+    /* =======================================================
+       END CURRENT SESSION
+    ======================================================= */
 
     if (sessionId) {
       await prisma.userSession.updateMany({
@@ -1184,40 +587,27 @@ export const logout = async (
       });
     }
 
-    /* =====================================================
-       AUDIT REQUEST INFO
-    ===================================================== */
-
-    const auditRequest =
-      getAuditRequestInfo(req);
-
-    /* =====================================================
-       AUDIT LOG
-    ===================================================== */
+    /* =======================================================
+       AUDIT — LOGOUT
+    ======================================================= */
 
     await createAuditLog({
       actorUserId: userId,
-
       targetUserId: userId,
 
-      action:
-        AUDIT_ACTIONS.LOGOUT,
-
-      category:
-        AUDIT_CATEGORIES.AUTH,
+      action: AUDIT_ACTIONS.LOGOUT,
+      category: AUDIT_CATEGORIES.AUTH,
 
       entityType: "User",
-
       entityId: userId,
 
-      sessionId:
-        sessionId ?? null,
+      sessionId: sessionId ?? null,
 
       description:
-        "User logged out.",
+        "User logged out successfully.",
 
       metadata: {
-        method: "manual",
+        sessionEnded: Boolean(sessionId),
       },
 
       ipAddress:
@@ -1227,32 +617,49 @@ export const logout = async (
         auditRequest.userAgent,
     });
 
-    if (sessionId) {
-  await createAuditLog({
-    actorUserId: userId,
-    targetUserId: userId,
-    action: AUDIT_ACTIONS.SESSION_ENDED,
-    category: AUDIT_CATEGORIES.SESSION,
-    entityType: "UserSession",
-    entityId: sessionId,
-    sessionId,
-    description: "User session ended.",
-    metadata: {
-      reason: "logout",
-    },
-    ipAddress: auditRequest.ipAddress,
-    userAgent: auditRequest.userAgent,
-  });
-}
+    /* =======================================================
+       HISTORY — LOGOUT
+    ======================================================= */
 
-    /* =====================================================
-       RESPONSE
-    ===================================================== */
+    await historyService.record({
+      actorUserId: userId,
+      targetUserId: userId,
+
+      category:
+        HISTORY_CATEGORY.SECURITY,
+
+      eventType:
+        HISTORY_EVENTS.LOGOUT,
+
+      operation:
+        HISTORY_OPERATION.LOGOUT,
+
+      entityType: "User",
+      entityId: userId,
+
+      title: "User logged out",
+
+      description:
+        "User successfully logged out.",
+
+      sessionId:
+        sessionId ?? null,
+
+      ipAddress:
+        auditRequest.ipAddress,
+
+      userAgent:
+        auditRequest.userAgent,
+
+      metadata: {
+        sessionEnded:
+          Boolean(sessionId),
+      },
+    });
 
     res.status(200).json({
       success: true,
-      message:
-        "Logout successful",
+      message: "Logout successful",
     });
   } catch (error) {
     console.error(

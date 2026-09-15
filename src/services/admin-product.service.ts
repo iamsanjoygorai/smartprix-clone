@@ -194,9 +194,9 @@ const extractSpecificationsFromDescription = (
   if (storageMatch) {
     let value = Number(storageMatch[1]);
 
-    if (storageMatch[2].toUpperCase() === "TB") {
-      value *= 1024;
-    }
+    if (storageMatch[2]?.toUpperCase() === "TB") {
+  value *= 1024;
+}
 
     detected["storage"] = String(value);
   } else {

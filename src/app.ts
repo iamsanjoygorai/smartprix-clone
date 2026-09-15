@@ -6,6 +6,7 @@ import morgan from "morgan";
 import { env } from "./config/env";
 import router from "./routes";
 import path from "path";
+import historyRoutes from "./modules/history/history.routes"; 
 
 const app = express();
 
@@ -48,5 +49,10 @@ app.get("/debug-review", (_req, res) => {
 });
 
 app.use("/api", router);
+
+app.use(
+  "/api/admin/history",
+  historyRoutes,
+);
 
 export default app;

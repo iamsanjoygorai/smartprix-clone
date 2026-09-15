@@ -1,15 +1,17 @@
 import { Router } from "express";
 
+import { requireAuth } from "../middlewares/auth.middleware";
+
 import {
   login,
   register,
-  getMe,
-  firebaseLogin,
-  updateProfile,
   logout,
 } from "../controllers/auth.controller";
 
-import { requireAuth } from "../middlewares/auth.middleware";
+import {
+  getProfile,
+  updateProfile,
+} from "../controllers/user.controller";
 
 const router = Router();
 
@@ -27,8 +29,6 @@ router.post(
 
 router.post("/register", register);
 
-router.post("/firebase", firebaseLogin);
-
 /* =========================================================
    CURRENT USER
 ========================================================= */
@@ -36,7 +36,7 @@ router.post("/firebase", firebaseLogin);
 router.get(
   "/me",
   requireAuth,
-  getMe,
+  getProfile,
 );
 
 /* =========================================================

@@ -11,14 +11,16 @@ export const getUserHistory = async (
   res: Response,
 ) => {
   try {
-    const userId = req.params.userId;
+    const userId =
+      typeof req.params.userId === "string"
+        ? req.params.userId
+        : "";
 
     if (!userId) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         message: "User ID is required",
       });
-      return;
     }
 
     /* =======================================================
@@ -45,10 +47,9 @@ export const getUserHistory = async (
     /* =======================================================
        GET AUDIT HISTORY
 
-       We search both actorUserId and targetUserId.
-
-       targetUserId is especially important because the
-       account may already have been permanently deleted.
+       Search both actorUserId and targetUserId.
+       targetUserId is important because the account may
+       already have been permanently deleted.
     ======================================================= */
 
     const logs = await prisma.auditLog.findMany({
@@ -72,7 +73,6 @@ export const getUserHistory = async (
         action: true,
         metadata: true,
         createdAt: true,
-
         actor: {
           select: {
             id: true,
@@ -89,8 +89,8 @@ export const getUserHistory = async (
        DELETED USER FALLBACK
 
        After permanent deletion, the User record no longer
-       exists. Recover the basic account information from
-       USER_DELETED metadata.
+       exists. Recover basic account information from the
+       USER_DELETED audit metadata.
     ======================================================= */
 
     let historyUser = user;
@@ -112,35 +112,27 @@ export const getUserHistory = async (
       if (deletionLog) {
         historyUser = {
           id: userId,
-
           name:
             typeof metadata?.name === "string"
               ? metadata.name
               : null,
-
           email:
             typeof metadata?.email === "string"
               ? metadata.email
               : null,
-
           mobile:
             typeof metadata?.mobile === "string"
               ? metadata.mobile
               : null,
-
           role:
             typeof metadata?.role === "string"
               ? metadata.role
               : "USER",
-
           isDisabled: false,
-
           profileImageUrl: null,
-
           createdAt: deletionLog.createdAt,
-
           updatedAt: deletionLog.createdAt,
-        };
+        } as typeof user;
       }
     }
 
@@ -157,13 +149,11 @@ export const getUserHistory = async (
       ).length,
 
       logins: logs.filter(
-        (log) =>
-          log.action === "USER_LOGIN",
+        (log) => log.action === "USER_LOGIN",
       ).length,
 
       logouts: logs.filter(
-        (log) =>
-          log.action === "USER_LOGOUT",
+        (log) => log.action === "USER_LOGOUT",
       ).length,
 
       profileUpdates: logs.filter(
@@ -197,14 +187,11 @@ export const getUserHistory = async (
        RESPONSE
     ======================================================= */
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-
       data: {
         user: historyUser,
-
         logs,
-
         stats,
       },
     });
@@ -214,7 +201,7 @@ export const getUserHistory = async (
       error,
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to load user history",
     });

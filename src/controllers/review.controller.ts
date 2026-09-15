@@ -7,22 +7,72 @@ import {
   deleteReview as deleteReviewService,
 } from "../services/review.service";
 
+/* =========================================================
+   PARAM HELPER
+========================================================= */
+
+const getParam = (
+  value: string | string[] | undefined,
+): string | undefined => {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+
+  return value;
+};
+
+/* =========================================================
+   USER ID HELPER
+========================================================= */
+
+const getUserId = (
+  req: Request,
+): string | undefined => {
+  if (
+    typeof req.user === "object" &&
+    req.user !== null &&
+    "userId" in req.user
+  ) {
+    const userId = req.user.userId;
+
+    if (typeof userId === "string") {
+      return userId;
+    }
+  }
+
+  return undefined;
+};
+
+/* =========================================================
+   CREATE REVIEW
+========================================================= */
+
 export const createReview = async (
   req: Request,
   res: Response,
 ) => {
   try {
-    const { productId, rating, title, content } =
-      req.body;
+    const {
+      productId,
+      rating,
+      title,
+      content,
+    } = req.body;
 
-    const userId = req.user.userId;
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
 
     if (!productId) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         message: "Product ID is required",
       });
-      return;
     }
 
     if (
@@ -31,11 +81,11 @@ export const createReview = async (
       rating < 1 ||
       rating > 5
     ) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
-        message: "Rating must be an integer between 1 and 5",
+        message:
+          "Rating must be an integer between 1 and 5",
       });
-      return;
     }
 
     const review = await createReviewService({
@@ -46,13 +96,16 @@ export const createReview = async (
       content,
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Review created successfully",
       review,
     });
   } catch (error) {
-    console.error("Create review failed:", error);
+    console.error(
+      "Create review failed:",
+      error,
+    );
 
     const message =
       error instanceof Error
@@ -67,32 +120,37 @@ export const createReview = async (
           ? 409
           : 400;
 
-    res.status(status).json({
+    return res.status(status).json({
       success: false,
       message,
     });
   }
 };
 
+/* =========================================================
+   GET PRODUCT REVIEWS
+========================================================= */
+
 export const getProductReviews = async (
   req: Request,
   res: Response,
 ) => {
   try {
-    const { productId } = req.params;
+    const productId = getParam(
+      req.params.productId,
+    );
 
     if (!productId) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         message: "Product ID is required",
       });
-      return;
     }
 
     const reviews =
       await getProductReviewsService(productId);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       reviews,
     });
@@ -102,30 +160,46 @@ export const getProductReviews = async (
       error,
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch product reviews",
     });
   }
 };
 
+/* =========================================================
+   UPDATE REVIEW
+========================================================= */
+
 export const updateReview = async (
   req: Request,
   res: Response,
 ) => {
   try {
-    const { reviewId } = req.params;
+    const reviewId = getParam(
+      req.params.reviewId,
+    );
 
-    const { rating, title, content } = req.body;
+    const {
+      rating,
+      title,
+      content,
+    } = req.body;
 
-    const userId = req.user.userId;
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
 
     if (!reviewId) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         message: "Review ID is required",
       });
-      return;
     }
 
     if (
@@ -137,30 +211,34 @@ export const updateReview = async (
         rating > 5
       )
     ) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
-        message: "Rating must be an integer between 1 and 5",
+        message:
+          "Rating must be an integer between 1 and 5",
       });
-      return;
     }
 
-    const review = await updateReviewService(
-      reviewId,
-      userId,
-      {
-        rating,
-        title,
-        content,
-      },
-    );
+    const review =
+      await updateReviewService(
+        reviewId,
+        userId,
+        {
+          rating,
+          title,
+          content,
+        },
+      );
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Review updated successfully",
       review,
     });
   } catch (error) {
-    console.error("Update review failed:", error);
+    console.error(
+      "Update review failed:",
+      error,
+    );
 
     const message =
       error instanceof Error
@@ -175,28 +253,40 @@ export const updateReview = async (
           ? 403
           : 400;
 
-    res.status(status).json({
+    return res.status(status).json({
       success: false,
       message,
     });
   }
 };
 
+/* =========================================================
+   DELETE REVIEW
+========================================================= */
+
 export const deleteReview = async (
   req: Request,
   res: Response,
 ) => {
   try {
-    const { reviewId } = req.params;
+    const reviewId = getParam(
+      req.params.reviewId,
+    );
 
-    const userId = req.user.userId;
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
 
     if (!reviewId) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         message: "Review ID is required",
       });
-      return;
     }
 
     await deleteReviewService(
@@ -204,12 +294,15 @@ export const deleteReview = async (
       userId,
     );
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Review deleted successfully",
     });
   } catch (error) {
-    console.error("Delete review failed:", error);
+    console.error(
+      "Delete review failed:",
+      error,
+    );
 
     const message =
       error instanceof Error
@@ -224,7 +317,7 @@ export const deleteReview = async (
           ? 403
           : 400;
 
-    res.status(status).json({
+    return res.status(status).json({
       success: false,
       message,
     });

@@ -8,6 +8,16 @@ import {
   updateNewsCategory,
 } from "../services/news-category.service";
 
+const getParam = (
+  value: string | string[] | undefined,
+): string | undefined => {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+
+  return value;
+};
+
 export async function getNewsCategories(
   _req: Request,
   res: Response
@@ -35,8 +45,21 @@ export async function getNewsCategory(
   res: Response
 ) {
   try {
-    const category =
-      await getNewsCategoryById(req.params.id);
+    const id =
+      typeof req.params.id === "string"
+        ? req.params.id
+        : Array.isArray(req.params.id)
+          ? req.params.id[0]
+          : undefined;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Category ID is required.",
+      });
+    }
+
+    const category = await getNewsCategoryById(id);
 
     if (!category) {
       return res.status(404).json({
@@ -131,6 +154,20 @@ export async function updateCategory(
   try {
     const { name, description } = req.body;
 
+    const id =
+      typeof req.params.id === "string"
+        ? req.params.id
+        : Array.isArray(req.params.id)
+          ? req.params.id[0]
+          : undefined;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Category ID is required.",
+      });
+    }
+
     if (
       !name ||
       typeof name !== "string" ||
@@ -142,8 +179,7 @@ export async function updateCategory(
       });
     }
 
-    const existing =
-      await getNewsCategoryById(req.params.id);
+    const existing = await getNewsCategoryById(id);
 
     if (!existing) {
       return res.status(404).json({
@@ -152,12 +188,11 @@ export async function updateCategory(
       });
     }
 
-    const category =
-      await updateNewsCategory(
-        req.params.id,
-        name,
-        description
-      );
+    const category = await updateNewsCategory(
+      id,
+      name,
+      description
+    );
 
     return res.status(200).json({
       success: true,
@@ -169,8 +204,7 @@ export async function updateCategory(
     if (error?.code === "P2002") {
       return res.status(409).json({
         success: false,
-        message:
-          "A category with this name already exists.",
+        message: "A category with this name already exists.",
       });
     }
 
@@ -186,8 +220,21 @@ export async function deleteCategory(
   res: Response
 ) {
   try {
-    const existing =
-      await getNewsCategoryById(req.params.id);
+    const id =
+      typeof req.params.id === "string"
+        ? req.params.id
+        : Array.isArray(req.params.id)
+          ? req.params.id[0]
+          : undefined;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Category ID is required.",
+      });
+    }
+
+    const existing = await getNewsCategoryById(id);
 
     if (!existing) {
       return res.status(404).json({
@@ -196,7 +243,7 @@ export async function deleteCategory(
       });
     }
 
-    await deleteNewsCategory(req.params.id);
+    await deleteNewsCategory(id);
 
     return res.status(200).json({
       success: true,

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { prisma } from "../lib/prisma";
+import prisma from "../lib/prisma";
 
 function createSlug(name: string) {
   return name
@@ -84,31 +84,41 @@ export async function getAdminBrand(
   res: Response,
 ) {
   try {
-    const { id } = req.params;
+    const id =
+  typeof req.params.id === "string"
+    ? req.params.id
+    : "";
 
-    const brand = await prisma.brand.findUnique({
-      where: {
-        id,
+if (!id) {
+  return res.status(400).json({
+    success: false,
+    message: "Brand ID is required.",
+  });
+}
+
+const brand = await prisma.brand.findUnique({
+  where: {
+    id,
+  },
+  include: {
+    _count: {
+      select: {
+        products: true,
       },
-      include: {
-        _count: {
-          select: {
-            products: true,
-          },
-        },
-        products: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            isActive: true,
-          },
-          orderBy: {
-            name: "asc",
-          },
-        },
+    },
+    products: {
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        isActive: true,
       },
-    });
+      orderBy: {
+        name: "asc",
+      },
+    },
+  },
+});
 
     if (!brand) {
       return res.status(404).json({
@@ -230,14 +240,25 @@ export async function updateAdminBrand(
   res: Response,
 ) {
   try {
-    const { id } = req.params;
+    const id =
+  typeof req.params.id === "string"
+    ? req.params.id
+    : "";
+
+    if (!id) {
+  return res.status(400).json({
+    success: false,
+    message: "Brand ID is required.",
+  });
+}
+
 
     const existingBrand =
-      await prisma.brand.findUnique({
-        where: {
-          id,
-        },
-      });
+  await prisma.brand.findUnique({
+    where: {
+      id,
+    },
+  });
 
     if (!existingBrand) {
       return res.status(404).json({
@@ -358,21 +379,31 @@ export async function deleteAdminBrand(
   res: Response,
 ) {
   try {
-    const { id } = req.params;
+  const id =
+    typeof req.params.id === "string"
+      ? req.params.id
+      : "";
 
-    const brand =
-      await prisma.brand.findUnique({
-        where: {
-          id,
-        },
-        include: {
-          _count: {
-            select: {
-              products: true,
-            },
+  if (!id) {
+    return res.status(400).json({
+      success: false,
+      message: "Brand ID is required.",
+    });
+  }
+
+  const brand =
+    await prisma.brand.findUnique({
+      where: {
+        id,
+      },
+      include: {
+        _count: {
+          select: {
+            products: true,
           },
         },
-      });
+      },
+    });
 
     if (!brand) {
       return res.status(404).json({

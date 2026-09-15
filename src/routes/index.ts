@@ -35,6 +35,8 @@ import favoriteRoutes from "./favorite.routes";
 import { getMyProfileHistory } from "../controllers/profile-history.controller";
 import accountRoutes from "../modules/account/account.routes";
 import adminAuditRoutes from "./admin-audit.routes";
+import analyticsRoutes from "../services/analytics/analytics.routes";
+
 
 
 const router = Router();
@@ -83,6 +85,12 @@ router.get("/health", (_req, res) => {
 // ==============================
 
 router.use("/products", productRoutes);
+
+router.use(
+  "/admin/analytics",
+  requireAuth,
+  analyticsRoutes,
+);
 
 
 // ==============================

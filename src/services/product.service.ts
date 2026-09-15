@@ -1,7 +1,5 @@
 import prisma from "../db/prisma";
 import { Prisma } from "@prisma/client";
-
-
 // ─────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────
@@ -42,7 +40,7 @@ const getSearchTokens = (value: string): string[] => {
     .filter(Boolean);
 };
 
-const specificationSlugs: Record<string, string[]> = {
+const specificationSlugs = {
   display: [
     "display",
     "display-type",
@@ -158,7 +156,7 @@ const specificationSlugs: Record<string, string[]> = {
   ],
 };
 
-const laptopSpecificationSlugs: Record<string, string[]> = {
+const laptopSpecificationSlugs = {
   processor: [
     "processor",
     "cpu",
@@ -479,11 +477,7 @@ const findSimilarProductIds = async (
 
 export const getProducts = async (
   query: Record<string, unknown>,
-) => {
-  // ─────────────────────────────────────────────
-  // BASIC QUERY PARAMETERS
-  // ─────────────────────────────────────────────
-
+): Promise<any> => {
   const search =
     typeof query.search === "string" &&
     query.search.trim()
@@ -1317,22 +1311,21 @@ if (displays.length > 0) {
       "12gb-above": 12,
     };
 
-    const values = ram
-      .map((value) => thresholds[value])
-      .filter(
-        (value): value is number =>
-          value !== undefined,
-      );
+  const ramValues = (ram ?? [])
+  .map((value) => thresholds[value])
+  .filter(
+    (value): value is number =>
+      value !== undefined,
+  );
 
-    const condition = numericAtLeast(
-      specificationSlugs.ram,
-      values,
-    );
+const condition = numericAtLeast(
+  specificationSlugs.ram,
+  ramValues,
+);
 
-    if (condition) {
-      sqlConditions.push(condition);
-    }
-  }
+if (condition) {
+  sqlConditions.push(condition);
+}}
 
   // ─────────────────────────────────────────────
   // BATTERY
@@ -1702,7 +1695,7 @@ if (
 
     if (match) {
       const amount = Number(match[1]);
-      const unit = match[2].toLowerCase();
+      const unit = match[2]?.toLowerCase() ?? "";
 
       const gbAmount =
         unit === "tb"
@@ -2049,7 +2042,15 @@ if (sqlConditions.length > 0) {
 // PRODUCTS
 // ─────────────────────────────────────────────
 
-let products;
+let products: Prisma.ProductGetPayload<{
+  include: {
+    brand: true;
+    images: true;
+    prices: true;
+    variants: true;
+    specifications: true;
+  };
+}>[] = [];
 
 // ─────────────────────────────────────────────
 // RELEVANCE SORT
@@ -2388,15 +2389,18 @@ if (
         // RELEVANCE / DEFAULT
         // ─────────────────────────────────────
 
-        case "relevance":
-        default:
-          return (
-            b.createdAt.getTime() -
-            a.createdAt.getTime()
-          );
-      }
-    })
-    .map((product) => product.id);
+              case "relevance":
+      default:
+        return (
+          b.createdAt.getTime() -
+          a.createdAt.getTime()
+        );
+    }
+
+    // Safety fallback for TypeScript.
+    return 0;
+  })
+  .map((product) => product.id);
 
   // ─────────────────────────────────────────────
   // PAGINATE AFTER SORTING
@@ -2737,6 +2741,7 @@ export const getProductBySlug = async (slug: string) => {
   };
 };
 
+
 export const getProductPrices = async (productId: string) => {
 return prisma.price.findMany({
 where: {
@@ -2834,5 +2839,5 @@ export const getProductSpecifications = async (
         sortOrder: specification.sortOrder,
       };
     })
-    .filter((item) => item.value !== null);
+  .filter((item) => item.value !== null);
 };

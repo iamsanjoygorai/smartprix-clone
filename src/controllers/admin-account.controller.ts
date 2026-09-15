@@ -6,7 +6,12 @@ export const changePassword = async (
   res: Response,
 ) => {
   try {
-    const userId = req.user?.userId;
+    const userId =
+  typeof req.user === "object" &&
+  req.user !== null &&
+  "userId" in req.user
+    ? String(req.user.userId)
+    : null;
 
     if (!userId) {
       return res.status(401).json({

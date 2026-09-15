@@ -60,12 +60,8 @@ const getDateRange = (
    BUILD FILTER
 ========================================================= */
 
-const buildAuditWhere = (
-  req: Request,
-) => {
-  const action = getStringQuery(
-    req.query.action,
-  );
+const buildAuditWhere = (req: Request) => {
+  const action = getStringQuery(req.query.action);
 
   const resource = getStringQuery(
     req.query.resource,
@@ -73,6 +69,30 @@ const buildAuditWhere = (
 
   const adminId = getStringQuery(
     req.query.admin,
+  );
+
+  const userId = getStringQuery(
+    req.query.userId,
+  );
+
+  const category = getStringQuery(
+    req.query.category,
+  );
+
+  const ipAddress = getStringQuery(
+    req.query.ipAddress,
+  );
+
+  const sessionId = getStringQuery(
+    req.query.sessionId,
+  );
+
+  const entityType = getStringQuery(
+    req.query.entityType,
+  );
+
+  const entityId = getStringQuery(
+    req.query.entityId,
   );
 
   const search = getStringQuery(
@@ -94,11 +114,62 @@ const buildAuditWhere = (
   }
 
   /* -------------------------------------------------------
-     ADMIN
+     ADMIN / ACTOR
   ------------------------------------------------------- */
 
   if (adminId) {
     where.actorUserId = adminId;
+  }
+
+  /* -------------------------------------------------------
+     USER
+  ------------------------------------------------------- */
+
+  if (userId) {
+    where.actorUserId = userId;
+  }
+
+  /* -------------------------------------------------------
+     CATEGORY
+  ------------------------------------------------------- */
+
+  if (category) {
+    where.category = category;
+  }
+
+  /* -------------------------------------------------------
+     IP ADDRESS
+  ------------------------------------------------------- */
+
+  if (ipAddress) {
+    where.ipAddress = {
+      contains: ipAddress,
+      mode: "insensitive",
+    };
+  }
+
+  /* -------------------------------------------------------
+     SESSION
+  ------------------------------------------------------- */
+
+  if (sessionId) {
+    where.sessionId = sessionId;
+  }
+
+  /* -------------------------------------------------------
+     ENTITY TYPE
+  ------------------------------------------------------- */
+
+  if (entityType) {
+    where.entityType = entityType;
+  }
+
+  /* -------------------------------------------------------
+     ENTITY ID
+  ------------------------------------------------------- */
+
+  if (entityId) {
+    where.entityId = entityId;
   }
 
   /* -------------------------------------------------------
@@ -116,15 +187,14 @@ const buildAuditWhere = (
      DATE RANGE
   ------------------------------------------------------- */
 
-  const createdAt =
-    getDateRange(dateRange);
+  const createdAt = getDateRange(dateRange);
 
   if (createdAt) {
     where.createdAt = createdAt;
   }
 
   /* -------------------------------------------------------
-     SEARCH
+     GLOBAL SEARCH
   ------------------------------------------------------- */
 
   if (search) {
@@ -135,7 +205,42 @@ const buildAuditWhere = (
           mode: "insensitive",
         },
       },
-
+      {
+        category: {
+          contains: search,
+          mode: "insensitive",
+        },
+      },
+      {
+        description: {
+          contains: search,
+          mode: "insensitive",
+        },
+      },
+      {
+        entityType: {
+          contains: search,
+          mode: "insensitive",
+        },
+      },
+      {
+        entityId: {
+          contains: search,
+          mode: "insensitive",
+        },
+      },
+      {
+        ipAddress: {
+          contains: search,
+          mode: "insensitive",
+        },
+      },
+      {
+        sessionId: {
+          contains: search,
+          mode: "insensitive",
+        },
+      },
       {
         actor: {
           name: {
@@ -144,7 +249,6 @@ const buildAuditWhere = (
           },
         },
       },
-
       {
         actor: {
           email: {
@@ -379,36 +483,33 @@ export const getAuditLogs = async (
     const resources =
       Array.from(resourceSet).sort();
 
-    return res.json({
-      success: true,
+   return res.json({
+  success: true,
 
-      data: {
-        logs,
+  data: logs,
 
-        stats: {
-          total,
-          today,
-          adminActions,
-          failed,
-        },
+  pagination: {
+    page,
+    limit,
+    total,
+    totalPages: Math.ceil(
+      total / limit,
+    ),
+  },
 
-        filters: {
-          actions,
-          resources,
-          admins,
-        },
+  stats: {
+    total,
+    today,
+    adminActions,
+    failed,
+  },
 
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages:
-            Math.ceil(
-              total / limit,
-            ),
-        },
-      },
-    }); 
+  filters: {
+    actions,
+    resources,
+    admins,
+  },
+}); 
   } catch (error) {
   console.error("========== GET AUDIT LOGS ERROR ==========");
   console.error(error);

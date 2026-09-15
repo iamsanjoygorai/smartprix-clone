@@ -1,13 +1,29 @@
 import { Request, Response } from "express";
+
 import prisma from "../db/prisma";
+
 import { createAuditLog } from "../services/audit.service";
+
+/* =========================================================
+   GET USER PERMISSIONS
+========================================================= */
 
 export const getUserPermissions = async (
   req: Request,
   res: Response,
 ) => {
   try {
-    const { id } = req.params;
+    const id =
+      typeof req.params.id === "string"
+        ? req.params.id
+        : "";
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
 
     const user = await prisma.user.findUnique({
       where: {
@@ -28,11 +44,12 @@ export const getUserPermissions = async (
       });
     }
 
-    const permissions = await prisma.permission.findMany({
-      orderBy: {
-        name: "asc",
-      },
-    });
+    const permissions =
+      await prisma.permission.findMany({
+        orderBy: {
+          name: "asc",
+        },
+      });
 
     const overrides =
       await prisma.userPermission.findMany({
@@ -51,22 +68,23 @@ export const getUserPermissions = async (
       ]),
     );
 
-    const userRoles = await prisma.userRole.findMany({
-      where: {
-        userId: id,
-      },
-      include: {
-        role: {
-          include: {
-            permissions: {
-              include: {
-                permission: true,
+    const userRoles =
+      await prisma.userRole.findMany({
+        where: {
+          userId: id,
+        },
+        include: {
+          role: {
+            include: {
+              permissions: {
+                include: {
+                  permission: true,
+                },
               },
             },
           },
         },
-      },
-    });
+      });
 
     const rolePermissions = new Set(
       userRoles.flatMap((userRole) =>
@@ -77,27 +95,28 @@ export const getUserPermissions = async (
       ),
     );
 
-    const result = permissions.map((permission) => {
-      const hasOverride = overrideMap.has(
-        permission.name,
-      );
+    const result = permissions.map(
+      (permission) => {
+        const hasOverride =
+          overrideMap.has(permission.name);
 
-      const override = overrideMap.get(
-        permission.name,
-      );
+        const override =
+          overrideMap.get(permission.name);
 
-      return {
-        name: permission.name,
-        description: permission.description,
-        roleAllowed: rolePermissions.has(
-          permission.name,
-        ),
-        override: hasOverride ? override : null,
-        allowed: hasOverride
-          ? override
-          : rolePermissions.has(permission.name),
-      };
-    });
+        return {
+          name: permission.name,
+          description: permission.description,
+          roleAllowed:
+            rolePermissions.has(permission.name),
+          override: hasOverride
+            ? override
+            : null,
+          allowed: hasOverride
+            ? override
+            : rolePermissions.has(permission.name),
+        };
+      },
+    );
 
     return res.json({
       success: true,
@@ -117,12 +136,26 @@ export const getUserPermissions = async (
   }
 };
 
+/* =========================================================
+   UPDATE USER PERMISSIONS
+========================================================= */
+
 export const updateUserPermissions = async (
   req: Request,
   res: Response,
 ) => {
   try {
-    const { id } = req.params;
+    const id =
+      typeof req.params.id === "string"
+        ? req.params.id
+        : "";
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
 
     const { permissions } = req.body as {
       permissions?: Array<{
@@ -184,7 +217,8 @@ export const updateUserPermissions = async (
     );
 
     for (const item of permissions) {
-      const permission = permissionMap.get(item.name);
+      const permission =
+        permissionMap.get(item.name);
 
       if (!permission) {
         return res.status(400).json({
@@ -211,9 +245,16 @@ export const updateUserPermissions = async (
       });
     }
 
-    if (req.user?.userId) {
+    const actorUserId =
+      typeof req.user === "object" &&
+      req.user !== null &&
+      "userId" in req.user
+        ? String(req.user.userId)
+        : null;
+
+    if (actorUserId) {
       await createAuditLog({
-        actorUserId: req.user.userId,
+        actorUserId,
         targetUserId: id,
         action: "USER_PERMISSIONS_UPDATED",
         metadata: {
@@ -224,7 +265,8 @@ export const updateUserPermissions = async (
 
     return res.json({
       success: true,
-      message: "User permissions updated successfully",
+      message:
+        "User permissions updated successfully",
     });
   } catch (error) {
     console.error(
@@ -234,7 +276,8 @@ export const updateUserPermissions = async (
 
     return res.status(500).json({
       success: false,
-      message: "Failed to update user permissions",
+      message:
+        "Failed to update user permissions",
     });
   }
 };

@@ -232,7 +232,18 @@ export const updateAdmin = async (
 
     const actorUserId = req.user.userId;
 
-    const { id } = req.params;
+    const id =
+  typeof req.params.id === "string"
+    ? req.params.id
+    : "";
+
+    if (!id) {
+  return res.status(400).json({
+    success: false,
+    message: "Admin ID is required",
+  });
+}
+
 
     const {
       name,
@@ -240,10 +251,10 @@ export const updateAdmin = async (
       role,
     } = req.body ?? {};
 
-    const existingUser =
-      await prisma.user.findUnique({
-        where: { id },
-      });
+   const existingUser =
+  await prisma.user.findUnique({
+    where: { id },
+  });
 
     if (!existingUser) {
       return res.status(404).json({
@@ -499,12 +510,22 @@ export const deleteAdmin = async (
 
     const actorUserId = req.user.userId;
 
-    const { id } = req.params;
+    const id =
+  typeof req.params.id === "string"
+    ? req.params.id
+    : "";
 
-    const existingUser =
-      await prisma.user.findUnique({
-        where: { id },
-      });
+    if (!id) {
+  return res.status(400).json({
+    success: false,
+    message: "Admin ID is required",
+  });
+}
+
+  const existingUser =
+  await prisma.user.findUnique({
+    where: { id },
+  });
 
     if (!existingUser) {
       return res.status(404).json({
@@ -597,63 +618,88 @@ export const updateAdminStatus = async (
   res: Response,
 ) => {
   try {
-    const { id } = req.params;
-    const { isDisabled } = req.body;
+   const id =
+  typeof req.params.id === "string"
+    ? req.params.id
+    : "";
 
-    if (typeof isDisabled !== "boolean") {
-      return res.status(400).json({
-        success: false,
-        message: "isDisabled must be a boolean",
-      });
-    }
+if (!id) {
+  return res.status(400).json({
+    success: false,
+    message: "Admin ID is required",
+  });
+}
 
-    if (req.user?.userId === id) {
-      return res.status(400).json({
-        success: false,
-        message: "You cannot block your own account",
-      });
-    }
+const { isDisabled } = req.body;
 
-    const admin = await prisma.user.findUnique({
-      where: {
-        id,
-      },
-    });
+if (typeof isDisabled !== "boolean") {
+  return res.status(400).json({
+    success: false,
+    message: "isDisabled must be a boolean",
+  });
+}
 
-    if (!admin) {
-      return res.status(404).json({
-        success: false,
-        message: "Admin not found",
-      });
-    }
+const actorUserId =
+  typeof req.user === "object" &&
+  req.user !== null &&
+  "userId" in req.user
+    ? String(req.user.userId)
+    : null;
 
-    const updatedAdmin = await prisma.user.update({
-      where: {
-        id,
-      },
-      data: {
-        isDisabled,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        isDisabled: true,
-      },
-    });
+if (!actorUserId) {
+  return res.status(401).json({
+    success: false,
+    message: "Unauthorized",
+  });
+}
 
-    await createAuditLog({
-      actorUserId: req.user.userId,
-      targetUserId: id,
-      action: isDisabled
-        ? "ADMIN_BLOCKED"
-        : "ADMIN_ACTIVATED",
-      metadata: {
-        email: admin.email,
-        role: admin.role,
-      },
-    });
+if (actorUserId === id) {
+  return res.status(400).json({
+    success: false,
+    message: "You cannot block your own account",
+  });
+}
+
+const admin = await prisma.user.findUnique({
+  where: {
+    id,
+  },
+});
+
+if (!admin) {
+  return res.status(404).json({
+    success: false,
+    message: "Admin not found",
+  });
+}
+
+const updatedAdmin = await prisma.user.update({
+  where: {
+    id,
+  },
+  data: {
+    isDisabled,
+  },
+  select: {
+    id: true,
+    name: true,
+    email: true,
+    role: true,
+    isDisabled: true,
+  },
+});
+
+await createAuditLog({
+  actorUserId,
+  targetUserId: id,
+  action: isDisabled
+    ? "ADMIN_BLOCKED"
+    : "ADMIN_ACTIVATED",
+  metadata: {
+    email: admin.email,
+    role: admin.role,
+  },
+});
 
     return res.json({
       success: true,

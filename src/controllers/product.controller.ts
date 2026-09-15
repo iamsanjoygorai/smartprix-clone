@@ -8,12 +8,21 @@ import {
   getProductSpecifications,
 } from "../services/product.service";
 
+import {
+  trackAnalyticsEvent,
+} from "../services/analytics/analytics.service";
+
+import {
+  ANALYTICS_EVENTS,
+} from "../services/analytics/analytics.events";
+
 export const getAllProducts = async (
   req: Request,
   res: Response,
 ) => {
   try {
     const result = await getProducts(req.query);
+    console.log("PRODUCT API RESULT:", result);
 
     res.status(200).json({
       success: true,
@@ -55,6 +64,17 @@ export const getProduct = async (
       });
       return;
     }
+    // Track product view
+    await trackAnalyticsEvent({
+      eventType: ANALYTICS_EVENTS.PRODUCT_VIEW,
+      entityType: "Product",
+      entityId: product.id,
+      path: req.originalUrl,
+      referrer:
+        typeof req.get("referer") === "string"
+          ? req.get("referer")
+          : null,
+    });
 
     res.status(200).json({
       success: true,
@@ -162,6 +182,18 @@ export const getSpecifications = async (
       });
       return;
     }
+
+    
+    await trackAnalyticsEvent({
+  eventType: ANALYTICS_EVENTS.PRODUCT_VIEW,
+  entityType: "Product",
+  entityId: product.id,
+  path: req.originalUrl,
+  referrer:
+    typeof req.get("referer") === "string"
+      ? req.get("referer")
+      : null,
+});
 
     res.status(200).json({
       success: true,

@@ -28,6 +28,8 @@ model User {
   deletedAt      DateTime?
   deletionReason String?
 
+  analyticsEvents AnalyticsEvent[]
+
   dateOfBirth     DateTime?
   gender          String?
   profileImageUrl String?
@@ -52,6 +54,12 @@ model User {
   // Audit history
   auditLogsAsActor  AuditLog[] @relation("AuditActor")
   auditLogsAsTarget AuditLog[] @relation("AuditTarget")
+
+  // Git-like history
+  historyEventsAsActor  HistoryEvent[] @relation("HistoryActor")
+  historyEventsAsTarget HistoryEvent[] @relation("HistoryTarget")
+
+  historySnapshotsCreated HistorySnapshot[] @relation("HistorySnapshotCreator")
 
   // Sessions
   sessions UserSession[]
@@ -163,6 +171,124 @@ model AuditLog {
   @@index([actorUserId, createdAt])
 }
 
+// ─────────────────────────────────────────────
+// GIT-LIKE HISTORY
+// ─────────────────────────────────────────────
+//
+// HistoryEvent is immutable.
+// It records what happened, who did it, what entity
+// was affected, and optionally what changed.
+//
+// IMPORTANT:
+// - Never update HistoryEvent.
+// - Never delete HistoryEvent.
+// - Do not store passwords, tokens, OTPs or secrets.
+// - "changes" contains before/after values.
+// ─────────────────────────────────────────────
+
+model HistoryEvent {
+  id String @id @default(cuid())
+
+  actorUserId  String?
+  targetUserId String?
+
+  category  String
+  eventType String
+  operation String?
+
+  entityType String?
+  entityId   String?
+
+  title       String
+  description String?
+
+  version Int?
+
+  changes  Json?
+  metadata Json?
+
+  sessionId String?
+
+  ipAddress String?
+  userAgent String?
+
+  country  String?
+  state    String?
+  city     String?
+  timezone String?
+
+  parentEventId String?
+
+  createdAt DateTime @default(now())
+
+  actor User? @relation("HistoryActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  targetUser User? @relation("HistoryTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  session UserSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  parentEvent HistoryEvent? @relation("HistoryEventTree", fields: [parentEventId], references: [id], onDelete: SetNull)
+
+  childEvents HistoryEvent[] @relation("HistoryEventTree")
+
+  @@index([actorUserId, createdAt])
+  @@index([targetUserId, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@index([entityType, entityId, version])
+  @@index([eventType, createdAt])
+  @@index([category, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([parentEventId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────
+// HISTORY SNAPSHOTS
+// ─────────────────────────────────────────────
+//
+// Snapshots allow us to reconstruct the state of
+// important entities.
+//
+// We DON'T create a full snapshot for every event.
+//
+// Example:
+//
+// Product
+// v1 → full snapshot
+// v2 → changes
+// v3 → changes
+// v10 → full snapshot
+//
+// This keeps storage manageable.
+// ─────────────────────────────────────────────
+
+model HistorySnapshot {
+  id String @id @default(cuid())
+
+  entityType String
+  entityId   String
+
+  version Int
+
+  data Json
+
+  eventId String?
+
+  createdByUserId String?
+
+  checksum String?
+
+  createdAt DateTime @default(now())
+
+  createdBy User? @relation("HistorySnapshotCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([entityType, entityId, version])
+  @@index([entityType, entityId, createdAt])
+  @@index([entityType, entityId, version])
+  @@index([createdByUserId, createdAt])
+  @@index([eventId])
+}
+
 model UserSession {
   id String @id @default(cuid())
 
@@ -186,6 +312,8 @@ model UserSession {
   city     String?
   timezone String?
 
+  analyticsEvents AnalyticsEvent[]
+
   metadata Json?
 
   createdAt DateTime @default(now())
@@ -195,6 +323,7 @@ model UserSession {
 
   auditLogs     AuditLog[]
   searchHistory SearchHistory[]
+  historyEvents HistoryEvent[]
 
   @@index([userId])
   @@index([userId, startedAt])
@@ -705,4 +834,44 @@ model UserPermission {
   @@unique([userId, permissionId])
   @@index([userId])
   @@index([permissionId])
+}
+
+
+model AnalyticsEvent {
+  id String @id @default(cuid())
+
+  eventType String
+
+  userId    String?
+  sessionId String?
+
+  entityType String?
+  entityId   String?
+
+  path   String?
+  referrer String?
+
+  metadata Json?
+
+  deviceType      String?
+  browser         String?
+  operatingSystem String?
+
+  ipAddress String?
+
+  country  String?
+  state    String?
+  city     String?
+  timezone String?
+
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  session UserSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([eventType, createdAt])
+  @@index([userId, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@index([createdAt])
 }

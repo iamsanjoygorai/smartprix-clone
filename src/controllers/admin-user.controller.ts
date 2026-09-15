@@ -1,7 +1,9 @@
 import type { Request, Response } from "express";
+
 import bcrypt from "bcryptjs";
 
 import prisma from "../db/prisma";
+
 import { createAuditLog } from "../services/audit.service";
 
 const ALLOWED_ROLES = [
@@ -12,8 +14,21 @@ const ALLOWED_ROLES = [
 ] as const;
 
 /**
- * GET /api/admin/users
+ * Express can type route params as:
+ * string | string[] | undefined
+ *
+ * Normalize them to a single string.
  */
+const getParam = (
+  value: string | string[] | undefined,
+): string | undefined => {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+
+  return value;
+};
+
 /**
  * GET /api/admin/users
  */
@@ -27,13 +42,19 @@ export const getUsers = async (
     // =====================================================
 
     const page = Math.max(
-      Number.parseInt(String(req.query.page ?? "1"), 10) || 1,
+      Number.parseInt(
+        String(req.query.page ?? "1"),
+        10,
+      ) || 1,
       1,
     );
 
     const limit = Math.min(
       Math.max(
-        Number.parseInt(String(req.query.limit ?? "20"), 10) || 20,
+        Number.parseInt(
+          String(req.query.limit ?? "20"),
+          10,
+        ) || 20,
         1,
       ),
       100,
@@ -162,16 +183,23 @@ export const getUsers = async (
 
     const skip = (page - 1) * limit;
 
-    console.log("========== ADMIN USERS FILTER ==========");
+    console.log(
+      "========== ADMIN USERS FILTER ==========",
+    );
     console.log("QUERY:", req.query);
     console.log("SEARCH:", search);
     console.log("ROLE:", role);
     console.log("STATUS:", status);
     console.log("SORT:", sort);
-    console.log("WHERE:", JSON.stringify(where, null, 2));
+    console.log(
+      "WHERE:",
+      JSON.stringify(where, null, 2),
+    );
     console.log("PAGE:", page);
     console.log("LIMIT:", limit);
-    console.log("========================================");
+    console.log(
+      "========================================",
+    );
 
     // =====================================================
     // DATABASE
@@ -266,7 +294,6 @@ export const getUsers = async (
 
     return res.status(200).json({
       success: true,
-
       data: {
         users,
 
@@ -315,7 +342,14 @@ export const updateUser = async (
   res: Response,
 ) => {
   try {
-    const { id } = req.params;
+    const id = getParam(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
 
     const {
       name,
@@ -324,7 +358,10 @@ export const updateUser = async (
       role,
     } = req.body ?? {};
 
-    if (!req.user || typeof req.user === "string") {
+    if (
+      !req.user ||
+      typeof req.user === "string"
+    ) {
       return res.status(401).json({
         success: false,
         message: "Authentication required",
@@ -333,11 +370,12 @@ export const updateUser = async (
 
     const actorUserId = req.user.userId;
 
-    const existingUser = await prisma.user.findUnique({
-      where: {
-        id,
-      },
-    });
+    const existingUser =
+      await prisma.user.findUnique({
+        where: {
+          id,
+        },
+      });
 
     if (!existingUser) {
       return res.status(404).json({
@@ -366,7 +404,8 @@ export const updateUser = async (
     ) {
       return res.status(400).json({
         success: false,
-        message: "SUPER_ADMIN cannot demote itself",
+        message:
+          "SUPER_ADMIN cannot demote itself",
       });
     }
 
@@ -376,17 +415,19 @@ export const updateUser = async (
       role !== undefined &&
       role !== "SUPER_ADMIN"
     ) {
-      const superAdminCount = await prisma.user.count({
-        where: {
-          role: "SUPER_ADMIN",
-          isDisabled: false,
-        },
-      });
+      const superAdminCount =
+        await prisma.user.count({
+          where: {
+            role: "SUPER_ADMIN",
+            isDisabled: false,
+          },
+        });
 
       if (superAdminCount <= 1) {
         return res.status(400).json({
           success: false,
-          message: "Cannot demote the last SUPER_ADMIN",
+          message:
+            "Cannot demote the last SUPER_ADMIN",
         });
       }
     }
@@ -396,16 +437,18 @@ export const updateUser = async (
       email !== undefined &&
       email !== existingUser.email
     ) {
-      const emailExists = await prisma.user.findUnique({
-        where: {
-          email,
-        },
-      });
+      const emailExists =
+        await prisma.user.findUnique({
+          where: {
+            email,
+          },
+        });
 
       if (emailExists) {
         return res.status(400).json({
           success: false,
-          message: "Email already registered",
+          message:
+            "Email already registered",
         });
       }
     }
@@ -417,7 +460,8 @@ export const updateUser = async (
     ) {
       return res.status(400).json({
         success: false,
-        message: "Password must be at least 8 characters",
+        message:
+          "Password must be at least 8 characters",
       });
     }
 
@@ -430,78 +474,83 @@ export const updateUser = async (
       role !== undefined &&
       role !== existingUser.role;
 
-    const updatedUser = await prisma.$transaction(
-      async (tx) => {
-        const user = await tx.user.update({
-          where: {
-            id,
-          },
-          data: {
-            ...(name !== undefined && {
-              name,
-            }),
+    const updatedUser =
+      await prisma.$transaction(
+        async (tx) => {
+          const user =
+            await tx.user.update({
+              where: {
+                id,
+              },
 
-            ...(email !== undefined && {
-              email,
-            }),
+              data: {
+                ...(name !== undefined && {
+                  name,
+                }),
 
-            ...(passwordHash !== undefined && {
-              passwordHash,
-            }),
+                ...(email !== undefined && {
+                  email,
+                }),
 
-            ...(role !== undefined && {
-              role,
-            }),
-          },
+                ...(passwordHash !== undefined && {
+                  passwordHash,
+                }),
 
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            role: true,
-            isDisabled: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        });
+                ...(role !== undefined && {
+                  role,
+                }),
+              },
 
-        // Keep UserRole synchronized with User.role
-        if (role !== undefined) {
-          const dbRole = await tx.role.findUnique({
-            where: {
-              name: role,
-            },
-          });
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                role: true,
+                isDisabled: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            });
 
-          if (!dbRole) {
-            throw new Error(
-              `Role ${role} not found`,
-            );
+          // Keep UserRole synchronized with User.role
+          if (role !== undefined) {
+            const dbRole =
+              await tx.role.findUnique({
+                where: {
+                  name: role,
+                },
+              });
+
+            if (!dbRole) {
+              throw new Error(
+                `Role ${role} not found`,
+              );
+            }
+
+            await tx.userRole.deleteMany({
+              where: {
+                userId: id,
+              },
+            });
+
+            await tx.userRole.create({
+              data: {
+                userId: id,
+                roleId: dbRole.id,
+              },
+            });
           }
 
-          await tx.userRole.deleteMany({
-            where: {
-              userId: id,
-            },
-          });
-
-          await tx.userRole.create({
-            data: {
-              userId: id,
-              roleId: dbRole.id,
-            },
-          });
-        }
-
-        return user;
-      },
-    );
+          return user;
+        },
+      );
 
     // General user update audit
     await createAuditLog({
       actorUserId,
       targetUserId: existingUser.id,
       action: "USER_UPDATED",
+
       metadata: {
         email: updatedUser.email,
         name: updatedUser.name,
@@ -517,6 +566,7 @@ export const updateUser = async (
         actorUserId,
         targetUserId: existingUser.id,
         action: "ROLE_CHANGED",
+
         metadata: {
           email: updatedUser.email,
           oldRole: existingUser.role,
@@ -527,15 +577,20 @@ export const updateUser = async (
 
     return res.status(200).json({
       success: true,
-      message: "User updated successfully",
+      message:
+        "User updated successfully",
       data: updatedUser,
     });
   } catch (error) {
-    console.error("Update user error:", error);
+    console.error(
+      "Update user error:",
+      error,
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to update user",
+      message:
+        "Failed to update user",
     });
   }
 };
@@ -548,9 +603,19 @@ export const disableUser = async (
   res: Response,
 ) => {
   try {
-    const { id } = req.params;
+    const id = getParam(req.params.id);
 
-    if (!req.user || typeof req.user === "string") {
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
+
+    if (
+      !req.user ||
+      typeof req.user === "string"
+    ) {
       return res.status(401).json({
         success: false,
         message: "Authentication required",
@@ -559,11 +624,12 @@ export const disableUser = async (
 
     const actorUserId = req.user.userId;
 
-    const user = await prisma.user.findUnique({
-      where: {
-        id,
-      },
-    });
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          id,
+        },
+      });
 
     if (!user) {
       return res.status(404).json({
@@ -575,7 +641,8 @@ export const disableUser = async (
     if (user.isDisabled) {
       return res.status(400).json({
         success: false,
-        message: "User is already disabled",
+        message:
+          "User is already disabled",
       });
     }
 
@@ -586,23 +653,26 @@ export const disableUser = async (
     ) {
       return res.status(400).json({
         success: false,
-        message: "SUPER_ADMIN cannot disable itself",
+        message:
+          "SUPER_ADMIN cannot disable itself",
       });
     }
 
     // Protect the last SUPER_ADMIN
     if (user.role === "SUPER_ADMIN") {
-      const superAdminCount = await prisma.user.count({
-        where: {
-          role: "SUPER_ADMIN",
-          isDisabled: false,
-        },
-      });
+      const superAdminCount =
+        await prisma.user.count({
+          where: {
+            role: "SUPER_ADMIN",
+            isDisabled: false,
+          },
+        });
 
       if (superAdminCount <= 1) {
         return res.status(400).json({
           success: false,
-          message: "Cannot disable the last SUPER_ADMIN",
+          message:
+            "Cannot disable the last SUPER_ADMIN",
         });
       }
     }
@@ -611,6 +681,7 @@ export const disableUser = async (
       where: {
         id,
       },
+
       data: {
         isDisabled: true,
       },
@@ -620,6 +691,7 @@ export const disableUser = async (
       actorUserId,
       targetUserId: user.id,
       action: "USER_DISABLED",
+
       metadata: {
         email: user.email,
         role: user.role,
@@ -628,14 +700,19 @@ export const disableUser = async (
 
     return res.status(200).json({
       success: true,
-      message: "User disabled successfully",
+      message:
+        "User disabled successfully",
     });
   } catch (error) {
-    console.error("Disable user error:", error);
+    console.error(
+      "Disable user error:",
+      error,
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to disable user",
+      message:
+        "Failed to disable user",
     });
   }
 };
@@ -648,9 +725,19 @@ export const deleteUser = async (
   res: Response,
 ) => {
   try {
-    const { id } = req.params;
+    const id = getParam(req.params.id);
 
-    if (!req.user || typeof req.user === "string") {
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
+
+    if (
+      !req.user ||
+      typeof req.user === "string"
+    ) {
       return res.status(401).json({
         success: false,
         message: "Authentication required",
@@ -659,11 +746,12 @@ export const deleteUser = async (
 
     const actorUserId = req.user.userId;
 
-    const user = await prisma.user.findUnique({
-      where: {
-        id,
-      },
-    });
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          id,
+        },
+      });
 
     if (!user) {
       return res.status(404).json({
@@ -679,63 +767,77 @@ export const deleteUser = async (
     ) {
       return res.status(400).json({
         success: false,
-        message: "SUPER_ADMIN cannot delete itself",
+        message:
+          "SUPER_ADMIN cannot delete itself",
       });
     }
 
     // Protect the last active SUPER_ADMIN
     if (user.role === "SUPER_ADMIN") {
-      const superAdminCount = await prisma.user.count({
-        where: {
-          role: "SUPER_ADMIN",
-          isDisabled: false,
-        },
-      });
+      const superAdminCount =
+        await prisma.user.count({
+          where: {
+            role: "SUPER_ADMIN",
+            isDisabled: false,
+          },
+        });
 
       if (superAdminCount <= 1) {
         return res.status(400).json({
           success: false,
-          message: "Cannot delete the last SUPER_ADMIN",
+          message:
+            "Cannot delete the last SUPER_ADMIN",
         });
       }
     }
 
     // Store values before deletion
-    const deletedUserEmail = user.email;
-    const deletedUserRole = user.role;
+    const deletedUserEmail =
+      user.email;
 
-    await prisma.$transaction(async (tx) => {
-      // Create audit log BEFORE deleting the user
-      await tx.auditLog.create({
-        data: {
-          actorUserId,
-          targetUserId: user.id,
-          action: "USER_DELETED",
-          metadata: {
-            email: deletedUserEmail,
-            role: deletedUserRole,
+    const deletedUserRole =
+      user.role;
+
+    await prisma.$transaction(
+      async (tx) => {
+        // Create audit log BEFORE deleting the user
+        await tx.auditLog.create({
+          data: {
+            actorUserId,
+            targetUserId: user.id,
+            action: "USER_DELETED",
+
+            metadata: {
+              email: deletedUserEmail,
+              role: deletedUserRole,
+            },
           },
-        },
-      });
+        });
 
-      // Delete the user
-      await tx.user.delete({
-        where: {
-          id,
-        },
-      });
-    });
+        // Delete the user
+        await tx.user.delete({
+          where: {
+            id,
+          },
+        });
+      },
+    );
 
     return res.status(200).json({
       success: true,
-      message: "User deleted successfully",
+      message:
+        "User deleted successfully",
     });
   } catch (error) {
-    console.error("Delete user error:", error);
+    console.error(
+      "Delete user error:",
+      error,
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to delete user",
+      message:
+        "Failed to delete user",
     });
   }
 };

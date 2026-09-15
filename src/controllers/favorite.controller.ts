@@ -1,6 +1,18 @@
 import { Request, Response } from "express";
 import prisma from "../db/prisma";
 
+
+const getParam = (
+  value: string | string[] | undefined,
+): string | undefined => {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+
+  return value;
+};
+
+
 /* =========================================================
    GET USER FAVORITES
    GET /api/favorites
@@ -106,7 +118,7 @@ export const addFavorite = async (
     }
 
     const userId = req.user.userId;
-    const { productId } = req.params;
+   const productId = getParam(req.params.productId);
 
     if (!userId) {
       res.status(401).json({
@@ -234,7 +246,7 @@ export const removeFavorite = async (
     }
 
     const userId = req.user.userId;
-    const { productId } = req.params;
+    const productId = getParam(req.params.productId);
 
     if (!userId) {
       res.status(401).json({
@@ -324,7 +336,7 @@ export const checkFavorite = async (
     }
 
     const userId = req.user.userId;
-    const { productId } = req.params;
+    const productId = getParam(req.params.productId);
 
     if (!userId) {
       res.status(401).json({

@@ -21,9 +21,6 @@ export const searchSuggestions = async (
         ? req.query.q.trim()
         : "";
 
-    /*
-     * Don't perform database searches for very short input.
-     */
     if (query.length < 1) {
       return res.json({
         success: true,
@@ -76,91 +73,100 @@ export const recordSearch = async (
       });
     }
 
-    /*
-     * Keep existing global search analytics.
-     */
+    /* -------------------------------------------------------
+       Global search analytics
+    ------------------------------------------------------- */
+
     await recordSearchQuery(query);
 
-    /*
-     * Get authenticated user/session information.
-     *
-     * requireAuth normally attaches the decoded JWT
-     * payload to req.user.
-     */
+    /* -------------------------------------------------------
+       Authenticated user/session information
+    ------------------------------------------------------- */
+
     const authUser = (req as any).user;
 
     const userId =
       typeof authUser === "string"
         ? authUser
-        : authUser?.userId ??
-          authUser?.id ??
-          null;
+        : typeof authUser?.userId === "string"
+          ? authUser.userId
+          : typeof authUser?.id === "string"
+            ? authUser.id
+            : null;
 
     const sessionId =
-      typeof authUser === "object"
-        ? authUser?.sessionId ?? null
+      typeof authUser === "object" &&
+      authUser !== null &&
+      typeof authUser.sessionId === "string"
+        ? authUser.sessionId
         : null;
 
-    /*
-     * Normalize the search query.
-     */
+    /* -------------------------------------------------------
+       Normalize search query
+    ------------------------------------------------------- */
+
     const normalized = query
       .toLowerCase()
       .replace(/\s+/g, " ")
       .trim();
 
-    /*
-     * Capture request/network information.
-     *
-     * Do NOT store authentication tokens,
-     * passwords, OTPs or cookies.
-     */
+    /* -------------------------------------------------------
+       Request/network information
+    ------------------------------------------------------- */
+
+    const forwardedFor =
+      req.headers["x-forwarded-for"];
+
     const ipAddress =
-      req.ip ||
-      req.headers["x-forwarded-for"]?.toString().split(",")[0].trim() ||
-      null;
+  req.ip ||
+  (typeof forwardedFor === "string"
+    ? forwardedFor.split(",")[0]?.trim() || null
+    : Array.isArray(forwardedFor)
+      ? forwardedFor[0] ?? null
+      : null);
 
     const userAgent =
-      req.headers["user-agent"]?.toString() || null;
-      const timezone =
-  req.headers["x-timezone"]?.toString() || null;
-
-    /*
-     * Optional filters sent by the frontend.
-     *
-     * Example:
-     * {
-     *   brands: ["samsung"],
-     *   minPrice: 20000,
-     *   maxPrice: 50000
-     * }
-     */
-    const filters =
-      req.body?.filters &&
-      typeof req.body.filters === "object"
-        ? req.body.filters
+      typeof req.headers["user-agent"] === "string"
+        ? req.headers["user-agent"]
         : null;
 
-    /*
-     * Save individual user search history.
-     *
-     * SearchHistory is separate from SearchQuery:
-     *
-     * SearchQuery   = aggregate analytics
-     * SearchHistory = individual user activity
-     */
-    await prisma.searchHistory.create({
-  data: {
-    userId,
-    sessionId,
-    query,
-    normalized,
-    filters,
-    ipAddress,
-    userAgent,
-    timezone,
-  },
-});
+    const timezone =
+      typeof req.headers["x-timezone"] === "string"
+        ? req.headers["x-timezone"]
+        : null;
+
+    /* -------------------------------------------------------
+       Optional frontend filters
+    ------------------------------------------------------- */
+
+    const body = req.body ?? {};
+  const filters =
+  body.filters &&
+  typeof body.filters === "object"
+    ? body.filters
+    : null;
+
+    /* -------------------------------------------------------
+       Individual user search history
+
+       Only create SearchHistory when a valid authenticated
+       user ID is available.
+    ------------------------------------------------------- */
+
+    if (typeof userId === "string") {
+      await prisma.searchHistory.create({
+        data: {
+          userId,
+          sessionId,
+          query,
+          normalized,
+          filters,
+          ipAddress,
+          userAgent,
+          timezone,
+        },
+      });
+    }
 
     return res.json({
       success: true,

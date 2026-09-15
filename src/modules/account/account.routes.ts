@@ -7,6 +7,14 @@ import {
   getMySessions,
 } from "./account.controller";
 
+import {
+  updateCompleteProfile,
+} from "../../controllers/user.controller";
+
+import {
+  profileImageUpload,
+} from "../../middlewares/upload.middleware";
+
 const router = Router();
 
 router.delete(
@@ -21,5 +29,11 @@ router.get(
   getMySessions,
 );
 
+router.patch(
+  "/complete",
+  requireAuth,
+  profileImageUpload.single("profileImage"),
+  updateCompleteProfile,
+);
 
 export default router;

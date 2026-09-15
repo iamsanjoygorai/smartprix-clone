@@ -9,21 +9,21 @@ export function getAuditRequestContext(req: Request) {
       : user?.userId ?? user?.id ?? null;
 
   const sessionId =
-    typeof user === "object"
-      ? user?.sessionId ?? null
+    user && typeof user === "object" && "sessionId" in user
+      ? user.sessionId ?? null
       : null;
 
-  const forwardedFor =
-    req.headers["x-forwarded-for"]
-      ?.toString()
-      .split(",")[0]
-      .trim();
+const forwardedFor = req.headers["x-forwarded-for"];
 
-  const ipAddress =
-    forwardedFor ||
-    req.ip ||
-    req.socket?.remoteAddress ||
-    null;
+const ipAddress =
+  (typeof forwardedFor === "string"
+    ? forwardedFor.split(",")[0]?.trim()
+    : Array.isArray(forwardedFor)
+      ? forwardedFor[0]
+      : undefined) ||
+  req.ip ||
+  req.socket?.remoteAddress ||
+  null;
 
   const userAgent =
     req.get("user-agent") || null;

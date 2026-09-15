@@ -96,45 +96,48 @@ export const getAdminCategory = async (
   res: Response,
 ) => {
   try {
-    const { id } = req.params;
+   const id =
+    typeof req.params.id === "string"
+      ? req.params.id
+      : "";
 
-    if (!id) {
-      res.status(400).json({
-        success: false,
-        message: "Category ID is required",
-      });
-      return;
-    }
+      if (!id) {
+    res.status(400).json({
+      success: false,
+      message: "Category ID is required",
+    });
+    return;
+  }
 
     const category = await prisma.category.findUnique({
       where: {
         id,
       },
       include: {
-        parent: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
-        children: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-          orderBy: {
-            name: "asc",
-          },
-        },
-        _count: {
-          select: {
-            products: true,
-            children: true,
-          },
-        },
-      },
+  parent: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+    },
+  },
+  children: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+    },
+    orderBy: {
+      name: "asc",
+    },
+  },
+  _count: {
+    select: {
+      products: true,
+      children: true,
+    },
+  },
+},
     });
 
     if (!category) {
@@ -268,7 +271,17 @@ export const updateAdminCategory = async (
   res: Response,
 ) => {
   try {
-    const { id } = req.params;
+    const id =
+  typeof req.params.id === "string"
+    ? req.params.id
+    : "";
+if (!id) {
+  res.status(400).json({
+    success: false,
+    message: "Category ID is required",
+  });
+  return;
+}
 
     const {
       name,
@@ -297,15 +310,23 @@ export const updateAdminCategory = async (
     }
 
     const existingCategory =
-      await prisma.category.findUnique({
-        where: {
-          id,
-        },
-        select: {
-          id: true,
-          parentId: true,
-        },
-      });
+  await prisma.category.findUnique({
+    where: {
+      id,
+    },
+    select: {
+      id: true,
+      parentId: true,
+    },
+  });
+
+if (!existingCategory) {
+  res.status(404).json({
+    success: false,
+    message: "Category not found",
+  });
+  return;
+}
 
     if (!existingCategory) {
       res.status(404).json({
@@ -434,15 +455,18 @@ export const deleteAdminCategory = async (
   res: Response,
 ) => {
   try {
-    const { id } = req.params;
+      const id =
+    typeof req.params.id === "string"
+      ? req.params.id
+      : "";
 
-    if (!id) {
-      res.status(400).json({
-        success: false,
-        message: "Category ID is required",
-      });
-      return;
-    }
+     if (!id) {
+    res.status(400).json({
+      success: false,
+      message: "Category ID is required",
+    });
+    return;
+  }
 
     const category = await prisma.category.findUnique({
       where: {

@@ -11,7 +11,11 @@ export const requirePermission = (
     next: NextFunction,
   ) => {
     try {
-      const userId = req.user?.userId;
+      const userId =
+  req.user &&
+  typeof req.user !== "string"
+    ? req.user.userId
+    : undefined;
 
       if (!userId) {
         return res.status(401).json({

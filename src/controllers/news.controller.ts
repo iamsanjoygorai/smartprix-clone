@@ -16,6 +16,16 @@ import {
 } from "../services/news.service";
 
 
+const getParam = (
+  value: string | string[] | undefined,
+): string | undefined => {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+
+  return value;
+};
+
 // ─────────────────────────────────────────────
 // CREATE NEWS
 // ─────────────────────────────────────────────
@@ -98,18 +108,30 @@ export const getAdminNewsById = async (
   res: Response,
 ) => {
   try {
-    const news = await getNewsById(req.params.id);
+    const id =
+      typeof req.params.id === "string"
+        ? req.params.id
+        : Array.isArray(req.params.id)
+          ? req.params.id[0]
+          : undefined;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "News ID is required",
+      });
+    }
+
+    const news = await getNewsById(id);
 
     if (!news) {
-      res.status(404).json({
+      return res.status(404).json({
         success: false,
         message: "News not found",
       });
-
-      return;
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: news,
     });
@@ -119,7 +141,7 @@ export const getAdminNewsById = async (
       error,
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch news",
     });
@@ -136,26 +158,36 @@ export const updateNewsPost = async (
   res: Response,
 ) => {
   try {
-    const result =
-      updateNewsSchema.safeParse(req.body);
+    const id =
+      typeof req.params.id === "string"
+        ? req.params.id
+        : Array.isArray(req.params.id)
+          ? req.params.id[0]
+          : undefined;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "News ID is required",
+      });
+    }
+
+    const result = updateNewsSchema.safeParse(req.body);
 
     if (!result.success) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         message: "Invalid news data",
-        errors:
-          result.error.flatten().fieldErrors,
+        errors: result.error.flatten().fieldErrors,
       });
-
-      return;
     }
 
     const news = await updateNews(
-      req.params.id,
+      id,
       result.data,
     );
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "News updated successfully",
       data: news,
@@ -172,15 +204,13 @@ export const updateNewsPost = async (
         : "Failed to update news";
 
     if (message === "News not found") {
-      res.status(404).json({
+      return res.status(404).json({
         success: false,
         message,
       });
-
-      return;
     }
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to update news",
     });
@@ -197,9 +227,23 @@ export const deleteNewsPost = async (
   res: Response,
 ) => {
   try {
-    await deleteNews(req.params.id);
+    const id =
+      typeof req.params.id === "string"
+        ? req.params.id
+        : Array.isArray(req.params.id)
+          ? req.params.id[0]
+          : undefined;
 
-    res.status(200).json({
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "News ID is required",
+      });
+    }
+
+    await deleteNews(id);
+
+    return res.status(200).json({
       success: true,
       message: "News deleted successfully",
     });
@@ -215,15 +259,13 @@ export const deleteNewsPost = async (
         : "Failed to delete news";
 
     if (message === "News not found") {
-      res.status(404).json({
+      return res.status(404).json({
         success: false,
         message,
       });
-
-      return;
     }
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to delete news",
     });
@@ -329,19 +371,30 @@ export const getPublicNewsBySlug = async (
   res: Response,
 ) => {
   try {
-    const news = await getNewsBySlug(
-      req.params.slug,
-    );
+    const slug =
+      typeof req.params.slug === "string"
+        ? req.params.slug
+        : Array.isArray(req.params.slug)
+          ? req.params.slug[0]
+          : undefined;
+
+    if (!slug) {
+      return res.status(400).json({
+        success: false,
+        message: "News slug is required",
+      });
+    }
+
+    const news = await getNewsBySlug(slug);
 
     if (!news || news.status !== "PUBLISHED") {
-      res.status(404).json({
+      return res.status(404).json({
         success: false,
         message: "News not found",
       });
-      return;
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: news,
     });
@@ -351,7 +404,7 @@ export const getPublicNewsBySlug = async (
       error,
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch news",
     });

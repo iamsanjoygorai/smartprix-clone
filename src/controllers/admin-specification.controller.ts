@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 
-import { prisma } from "../lib/prisma";
+import prisma from "../lib/prisma";
 
 /**
  * Create a URL-safe slug from a specification name.
@@ -168,10 +168,20 @@ export async function getAdminSpecification(
   res: Response,
 ) {
   try {
-    const { id } = req.params;
+    const id =
+  typeof req.params.id === "string"
+    ? req.params.id
+    : "";
+
+if (!id) {
+  return res.status(400).json({
+    success: false,
+    message: "Specification ID is required",
+  });
+}
 
     const specification =
-      await prisma.specification.findUnique({
+  await prisma.specification.findUnique({
         where: {
           id,
         },
@@ -380,14 +390,24 @@ export async function updateAdminSpecification(
   res: Response,
 ) {
   try {
-    const { id } = req.params;
+    const id =
+  typeof req.params.id === "string"
+    ? req.params.id
+    : "";
+
+if (!id) {
+  return res.status(400).json({
+    success: false,
+    message: "Specification ID is required",
+  });
+}
 
     const existingSpecification =
-      await prisma.specification.findUnique({
-        where: {
-          id,
-        },
-      });
+  await prisma.specification.findUnique({
+    where: {
+      id,
+    },
+  });
 
     if (!existingSpecification) {
       return res.status(404).json({
@@ -566,23 +586,32 @@ export async function deleteAdminSpecification(
   res: Response,
 ) {
   try {
-    const { id } = req.params;
+    const id =
+  typeof req.params.id === "string"
+    ? req.params.id
+    : "";
 
-    const specification =
-      await prisma.specification.findUnique({
-        where: {
-          id,
-        },
+if (!id) {
+  return res.status(400).json({
+    success: false,
+    message: "Specification ID is required",
+  });
+}
 
-        include: {
-          _count: {
-            select: {
-              products: true,
-              values: true,
-            },
-          },
+   const specification =
+  await prisma.specification.findUnique({
+    where: {
+      id,
+    },
+    include: {
+      _count: {
+        select: {
+          products: true,
+          values: true,
         },
-      });
+      },
+    },
+  });
 
     if (!specification) {
       return res.status(404).json({
@@ -611,27 +640,25 @@ export async function deleteAdminSpecification(
      * automatically because the Prisma relation
      * uses onDelete: Cascade.
      */
-    await prisma.specification.delete({
-      where: {
-        id,
-      },
-    });
+   await prisma.specification.delete({
+  where: {
+    id,
+  },
+});
 
-    return res.json({
-      success: true,
-      message:
-        "Specification deleted successfully.",
-    });
-  } catch (error) {
-    console.error(
-      "Failed to delete admin specification:",
-      error,
-    );
+return res.json({
+  success: true,
+  message:
+    "Specification deleted successfully.",
+});
+} catch (error) {
+  console.error(
+    "Failed to delete admin specification:",
+    error,
+  );
 
-    return res.status(500).json({
-      success: false,
-      message: "Failed to delete specification.",
-    });
-  }
-}
-
+  return res.status(500).json({
+    success: false,
+    message: "Failed to delete specification.",
+  });
+}}

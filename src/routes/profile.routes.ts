@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import { getMyProfileHistory } from "../controllers/profile-history.controller";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth } from "../middlewares/auth.middleware";
 
 const router = Router();
 
