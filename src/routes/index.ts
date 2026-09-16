@@ -36,7 +36,7 @@ import { getMyProfileHistory } from "../controllers/profile-history.controller";
 import accountRoutes from "../modules/account/account.routes";
 import adminAuditRoutes from "./admin-audit.routes";
 import analyticsRoutes from "../services/analytics/analytics.routes";
-import priceAlertRoutes from "../modules/price-alerts/price-alert.routes";
+import priceAlertRoutes from "../modules/price-alert/price-alert.routes";
 
 
 
@@ -74,11 +74,7 @@ router.use("/favorites", favoriteRoutes);
 // Price Alerts
 // ==============================
 
-router.use(
-  "/price-alerts",
-  requireAuth,
-  priceAlertRoutes,
-);
+router.use("/price-alerts", priceAlertRoutes);
 
 
 // ==============================
