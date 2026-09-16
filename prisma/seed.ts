@@ -1704,26 +1704,51 @@ if (asusProduct) {
   // SPECIFICATION VALUES
   // ─────────────────────────────────────────────
 
-  const displayS25 = await prisma.specificationValue.create({
-    data: {
-      specificationId: display.id,
-      value: "6.2-inch AMOLED 120Hz",
+// ─────────────────────────────────────────────
+// SPECIFICATION VALUES
+// ─────────────────────────────────────────────
+
+async function getOrCreateSpecificationValue(
+  specificationId: string,
+  value: string,
+) {
+  const existing = await prisma.specificationValue.findFirst({
+    where: {
+      specificationId,
+      value,
     },
   });
 
-  const displayIphone16 = await prisma.specificationValue.create({
-    data: {
-      specificationId: display.id,
-      value: "6.1-inch OLED 60Hz",
-    },
-  });
+  if (existing) {
+    return existing;
+  }
 
-  const displayOneplus13 = await prisma.specificationValue.create({
+  return prisma.specificationValue.create({
     data: {
-      specificationId: display.id,
-      value: "6.82-inch AMOLED 120Hz",
+      specificationId,
+      value,
     },
   });
+}
+
+const displayS25 = await getOrCreateSpecificationValue(
+  display.id,
+  "6.2-inch AMOLED 120Hz",
+);
+
+const displayIphone16 = await getOrCreateSpecificationValue(
+  display.id,
+  "6.1-inch OLED 60Hz",
+);
+
+const displayOneplus13 = await getOrCreateSpecificationValue(
+  display.id,
+  "6.82-inch AMOLED 120Hz",
+);
+
+// ─────────────────────────────────────────────
+// PRODUCT SPECIFICATIONS
+// ─────────────────────────────────────────────
 
   // ─────────────────────────────────────────────
   // PRODUCT SPECIFICATIONS
@@ -2030,72 +2055,105 @@ if (asusProduct) {
   // PRICES
   // ─────────────────────────────────────────────
 
-  await prisma.price.createMany({
-    data: [
-      {
-        productId: galaxyS25.id,
-        variantId: s25Variant.id,
-        sellerId: amazon.id,
-        amount: 74999,
-        currency: "INR",
-        inStock: true,
-        productUrl: "https://www.amazon.in",
-      },
-      {
-        productId: galaxyS25.id,
-        variantId: s25Variant.id,
-        sellerId: flipkart.id,
-        amount: 73999,
-        currency: "INR",
-        inStock: true,
-        productUrl: "https://www.flipkart.com",
-      },
-      {
-        productId: iphone16.id,
-        variantId: iphoneVariant.id,
-        sellerId: amazon.id,
-        amount: 69999,
-        currency: "INR",
-        inStock: true,
-        productUrl: "https://www.amazon.in",
-      },
-      {
-        productId: iphone16.id,
-        variantId: iphoneVariant.id,
-        sellerId: flipkart.id,
-        amount: 67999,
-        currency: "INR",
-        inStock: true,
-        productUrl: "https://www.flipkart.com",
-      },
-      {
-        productId: oneplus13.id,
-        variantId: oneplusVariant.id,
-        sellerId: amazon.id,
-        amount: 69999,
-        currency: "INR",
-        inStock: true,
-        productUrl: "https://www.amazon.in",
-      },
-      {
-        productId: oneplus13.id,
-        variantId: oneplusVariant.id,
-        sellerId: flipkart.id,
-        amount: 68999,
-        currency: "INR",
-        inStock: true,
-        productUrl: "https://www.flipkart.com",
-      },
-      {
-        productId: lenovoIdeaPad.id,
-        sellerId: amazon.id,
-        amount: 64990,
-        currency: "INR",
-        inStock: true,
-        productUrl: "https://www.amazon.in",
-      },
-    ],
+ const seedPrices = [
+  {
+    productId: galaxyS25.id,
+    variantId: s25Variant.id,
+    sellerId: amazon.id,
+    amount: 74999,
+    currency: "INR",
+    inStock: true,
+    productUrl: "https://www.amazon.in",
+  },
+  {
+    productId: galaxyS25.id,
+    variantId: s25Variant.id,
+    sellerId: flipkart.id,
+    amount: 73999,
+    currency: "INR",
+    inStock: true,
+    productUrl: "https://www.flipkart.com",
+  },
+  {
+    productId: iphone16.id,
+    variantId: iphoneVariant.id,
+    sellerId: amazon.id,
+    amount: 69999,
+    currency: "INR",
+    inStock: true,
+    productUrl: "https://www.amazon.in",
+  },
+  {
+    productId: iphone16.id,
+    variantId: iphoneVariant.id,
+    sellerId: flipkart.id,
+    amount: 67999,
+    currency: "INR",
+    inStock: true,
+    productUrl: "https://www.flipkart.com",
+  },
+  {
+    productId: oneplus13.id,
+   variantId: oneplusVariant.id,
+    sellerId: amazon.id,
+    amount: 69999,
+    currency: "INR",
+    inStock: true,
+    productUrl: "https://www.amazon.in",
+  },
+  {
+    productId: oneplus13.id,
+    variantId: oneplusVariant.id,
+    sellerId: flipkart.id,
+    amount: 68999,
+    currency: "INR",
+    inStock: true,
+    productUrl: "https://www.flipkart.com",
+  },
+  {
+    productId: lenovoIdeaPad.id,
+    sellerId: amazon.id,
+    amount: 64990,
+    currency: "INR",
+    inStock: true,
+    productUrl: "https://www.amazon.in",
+  },
+];
+
+let pricesCreated = 0;
+let pricesSkipped = 0;
+
+for (const price of seedPrices) {
+  const existing = await prisma.price.findFirst({
+    where: {
+      productId: price.productId,
+      variantId: price.variantId ?? null,
+      sellerId: price.sellerId,
+      amount: price.amount,
+      currency: price.currency,
+      inStock: price.inStock,
+      productUrl: price.productUrl,
+    },
+    select: {
+      id: true,
+    },
   });
+
+  if (existing) {
+    pricesSkipped++;
+    continue;
+  }
+
+  await prisma.price.create({
+    data: price,
+  });
+
+  pricesCreated++;
+}
+
+console.log(
+  `💰 Seed prices: ${pricesCreated} created, ${pricesSkipped} already existed.`,
+);
 
 
     // ─────────────────────────────────────────────
