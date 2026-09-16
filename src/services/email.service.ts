@@ -222,3 +222,183 @@ If you did not request this password reset, you can safely ignore this email.`,
     `,
   });
 };
+
+
+/**
+ * Sends a Price Alert notification email.
+ */
+export const sendPriceAlertEmail = async ({
+  email,
+  productName,
+  productSlug,
+  targetPrice,
+  currentPrice,
+  currency,
+}: {
+  email: string;
+  productName: string;
+  productSlug: string;
+  targetPrice: number;
+  currentPrice: number;
+  currency: string;
+}) => {
+  const productUrl = `${env.FRONTEND_URL}/mobiles/${productSlug}`;
+
+  await transporter.sendMail({
+    from: env.MAIL_FROM,
+    to: email,
+    subject: `Price Alert: ${productName} has reached your target price`,
+
+    text: `Good news!
+
+The price of ${productName} has reached your target price.
+
+Current price: ${currency} ${currentPrice.toLocaleString("en-IN")}
+Your target price: ${currency} ${targetPrice.toLocaleString("en-IN")}
+
+View the product:
+${productUrl}
+
+Your Smartprix Price Alert has now been triggered.`,
+
+    html: `
+      <div
+        style="
+          font-family: Arial, Helvetica, sans-serif;
+          max-width: 600px;
+          margin: 0 auto;
+          padding: 32px 20px;
+          color: #1c1e21;
+        "
+      >
+        <div
+          style="
+            text-align: center;
+            margin-bottom: 28px;
+          "
+        >
+          <div
+            style="
+              display: inline-block;
+              font-size: 30px;
+              font-weight: 800;
+              color: #1877f2;
+              letter-spacing: -1px;
+            "
+          >
+            Smartprix
+          </div>
+        </div>
+
+        <div
+          style="
+            border: 1px solid #e4e6eb;
+            border-radius: 14px;
+            padding: 30px;
+            background: #ffffff;
+          "
+        >
+          <h2
+            style="
+              margin: 0 0 12px;
+              font-size: 24px;
+              color: #1c1e21;
+            "
+          >
+            🎉 Your price alert has been triggered!
+          </h2>
+
+          <p
+            style="
+              margin: 0 0 24px;
+              font-size: 15px;
+              line-height: 1.6;
+              color: #65676b;
+            "
+          >
+            Good news! The price of
+            <strong>${productName}</strong>
+            has reached your target price.
+          </p>
+
+          <div
+            style="
+              background: #f0f6ff;
+              border-radius: 12px;
+              padding: 20px;
+              margin: 24px 0;
+            "
+          >
+            <p style="margin: 0 0 10px; color: #65676b;">
+              Current price
+            </p>
+
+            <div
+              style="
+                font-size: 30px;
+                font-weight: 800;
+                color: #1877f2;
+              "
+            >
+              ${currency} ${currentPrice.toLocaleString("en-IN")}
+            </div>
+
+            <p
+              style="
+                margin: 14px 0 0;
+                color: #65676b;
+              "
+            >
+              Your target:
+              <strong>
+                ${currency} ${targetPrice.toLocaleString("en-IN")}
+              </strong>
+            </p>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a
+              href="${productUrl}"
+              style="
+                display: inline-block;
+                padding: 13px 24px;
+                background: #1877f2;
+                color: #ffffff;
+                text-decoration: none;
+                border-radius: 8px;
+                font-weight: 700;
+              "
+            >
+              View Product
+            </a>
+          </div>
+
+          <p
+            style="
+              margin: 24px 0 0;
+              padding-top: 20px;
+              border-top: 1px solid #e4e6eb;
+              font-size: 13px;
+              line-height: 1.5;
+              color: #8a8d91;
+            "
+          >
+            This price alert has been automatically deactivated because
+            your target price was reached.
+          </p>
+        </div>
+
+        <p
+          style="
+            margin: 22px 0 0;
+            text-align: center;
+            font-size: 12px;
+            color: #8a8d91;
+          "
+        >
+          © ${new Date().getFullYear()} Smartprix
+        </p>
+      </div>
+    `,
+  });
+};

@@ -20,25 +20,30 @@ const envSchema = z.object({
     .url()
     .default("http://localhost:3000"),
 
+      FRONTEND_URL: z
+    .string()
+    .url()
+    .default("http://localhost:3000"),
+
   JWT_SECRET: z
     .string()
     .min(32, "JWT_SECRET must be at least 32 characters"),
 
   JWT_EXPIRES_IN: z
-  .string()
-  .default("1d"),
+    .string()
+    .default("1d"),
 
-JWT_USER_EXPIRES_IN: z
-  .string()
-  .default("30d"),
+  JWT_USER_EXPIRES_IN: z
+    .string()
+    .default("30d"),
 
-JWT_ADMIN_EXPIRES_IN: z
-  .string()
-  .default("7d"),
+  JWT_ADMIN_EXPIRES_IN: z
+    .string()
+    .default("7d"),
 
-JWT_SUPER_ADMIN_EXPIRES_IN: z
-  .string()
-  .default("1d"),
+  JWT_SUPER_ADMIN_EXPIRES_IN: z
+    .string()
+    .default("1d"),
 
   SMTP_HOST: z
     .string()
@@ -61,13 +66,28 @@ JWT_SUPER_ADMIN_EXPIRES_IN: z
   MAIL_FROM: z
     .string()
     .min(1, "MAIL_FROM is required"),
+
+  /**
+   * Price Alert Engine scheduler interval.
+   *
+   * Default: 5 minutes
+   */
+  PRICE_ALERT_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(300_000),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
 
 if (!parsedEnv.success) {
   console.error("❌ Invalid environment variables:");
-  console.error(parsedEnv.error.flatten().fieldErrors);
+
+  console.error(
+    parsedEnv.error.flatten().fieldErrors,
+  );
+
   process.exit(1);
 }
 
