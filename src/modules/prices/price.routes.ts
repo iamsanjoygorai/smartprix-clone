@@ -1,24 +1,13 @@
 import { Router } from "express";
 
 import {
-  getAllProducts,
-  getProduct,
   getPrices,
   getPriceHistory,
-  getSpecifications,
-} from "../controllers/product.controller";
-
-import {
   getBestPriceController,
   getPriceStatisticsController,
-} from "../modules/prices/price.controller";
+} from "./price.controller";
 
 const router = Router();
-
-router.get(
-  "/",
-  getAllProducts,
-);
 
 router.get(
   "/:slug/prices",
@@ -38,16 +27,6 @@ router.get(
 router.get(
   "/:slug/price-statistics",
   getPriceStatisticsController,
-);
-
-router.get(
-  "/:slug/specifications",
-  getSpecifications,
-);
-
-router.get(
-  "/:slug",
-  getProduct,
 );
 
 export default router;

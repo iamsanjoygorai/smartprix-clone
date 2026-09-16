@@ -3,10 +3,13 @@ import { Request, Response } from "express";
 import {
   getProducts,
   getProductBySlug,
-  getProductPrices,
-  getProductPriceHistory,
   getProductSpecifications,
 } from "../services/product.service";
+
+import {
+  getProductPrices,
+  getProductPriceHistory,
+} from "../modules/prices/price.service";
 
 import {
   trackAnalyticsEvent,
