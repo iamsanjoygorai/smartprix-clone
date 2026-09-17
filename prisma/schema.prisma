@@ -7,6 +7,24 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum ContentStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ContentStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
 // ─────────────────────────────────────────────
 // USERS
 // ─────────────────────────────────────────────
@@ -73,6 +91,19 @@ model User {
   @@index([isDeleted])
   @@index([isDeleted, createdAt])
   @@index([role])
+
+authoredArticles Article[] @relation("ArticleAuthor")
+authoredNews     News[]    @relation("NewsAuthor")
+authoredPages    Page[]    @relation("PageAuthor")
+
+uploadedMedia Media[] @relation("MediaUploader")
+
+articleRevisions ArticleRevision[] @relation("ArticleRevisionEditor")
+newsRevisions    NewsRevision[]    @relation("NewsRevisionEditor")
+pageRevisions    PageRevision[]    @relation("PageRevisionEditor")
+
+createdRedirects Redirect[] @relation("RedirectCreator")
+
 }
 
 model Role {
@@ -747,13 +778,55 @@ model Favorite {
 model News {
   id String @id @default(cuid())
 
-  title         String
-  slug          String  @unique
-  authorName    String
+  title String
+  slug  String @unique
+
+  excerpt String?
+
+  // Structured CMS content
+  contentJson Json?
+
+  status ContentStatus @default(DRAFT)
+
+  // Legacy compatibility
+  authorName String
+
+  authorId String?
+  author   User? @relation("NewsAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  // New CMS taxonomy
+  categoryId String?
+  category   ContentCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
   featuredImage String?
 
-  status      String    @default("DRAFT")
+  featuredMediaId String?
+  featuredMedia   Media? @relation("NewsFeaturedMedia", fields: [featuredMediaId], references: [id], onDelete: SetNull)
+
+  // Existing legacy block system
+  blocks     NewsBlock[]
+  categories NewsCategoryPost[]
+
+  // CMS relationships
+  tags     NewsTag[]
+  products NewsProduct[]
+
+  revisions NewsRevision[]
+
+  // SEO
+  seoTitle       String?
+  seoDescription String?
+  canonicalUrl   String?
+  robots         String?
+  ogTitle        String?
+  ogDescription  String?
+
+  ogImageId String?
+  ogImage   Media? @relation("NewsOgImage", fields: [ogImageId], references: [id], onDelete: SetNull)
+
   publishedAt DateTime?
+  scheduledAt DateTime?
+  archivedAt  DateTime?
 
   allowLikes    Boolean @default(true)
   allowComments Boolean @default(true)
@@ -763,15 +836,226 @@ model News {
   commentCount Int @default(0)
   shareCount   Int @default(0)
 
-  blocks     NewsBlock[]
-  categories NewsCategoryPost[]
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([status])
+  @@index([status, publishedAt])
+  @@index([authorId])
+  @@index([categoryId])
   @@index([publishedAt])
+  @@index([scheduledAt])
   @@index([createdAt])
+}
+
+model Media {
+  id String @id @default(cuid())
+
+  filename     String
+  originalName String
+
+  mimeType String
+  size     Int
+
+  width  Int?
+  height Int?
+
+  url String
+
+  altText String?
+  caption String?
+  folder  String?
+
+  uploadedById String
+  uploadedBy   User @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  articleFeatured Article[] @relation("ArticleFeaturedMedia")
+  articleOg       Article[] @relation("ArticleOgImage")
+
+  newsFeatured News[] @relation("NewsFeaturedMedia")
+  newsOg       News[] @relation("NewsOgImage")
+
+  pageFeatured Page[] @relation("PageFeaturedMedia")
+  pageOg       Page[] @relation("PageOgImage")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([uploadedById])
+  @@index([mimeType])
+  @@index([folder])
+  @@index([createdAt])
+}
+
+model ArticleTag {
+  articleId String
+  tagId     String
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  tag     ContentTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, tagId])
+  @@index([tagId])
+}
+
+model NewsTag {
+  newsId String
+  tagId  String
+
+  news News @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  tag  ContentTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([newsId, tagId])
+  @@index([tagId])
+}
+
+model ArticleProduct {
+  articleId String
+  productId String
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, productId])
+  @@index([productId])
+}
+
+model NewsProduct {
+  newsId    String
+  productId String
+
+  news    News    @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([newsId, productId])
+  @@index([productId])
+}
+
+model ArticleRevision {
+  id String @id @default(cuid())
+
+  articleId String
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  version Int
+
+  title       String
+  excerpt     String?
+  contentJson Json
+  status      ContentStatus
+
+  editedById String
+  editedBy   User @relation("ArticleRevisionEditor", fields: [editedById], references: [id], onDelete: Restrict)
+
+  changeSummary String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([articleId, version])
+  @@index([articleId, createdAt])
+}
+
+model NewsRevision {
+  id String @id @default(cuid())
+
+  newsId String
+  news   News @relation(fields: [newsId], references: [id], onDelete: Cascade)
+
+  version Int
+
+  title       String
+  excerpt     String?
+  contentJson Json
+  status      ContentStatus
+
+  editedById String
+  editedBy   User @relation("NewsRevisionEditor", fields: [editedById], references: [id], onDelete: Restrict)
+
+  changeSummary String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([newsId, version])
+  @@index([newsId, createdAt])
+}
+
+model PageRevision {
+  id String @id @default(cuid())
+
+  pageId String
+  page   Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  version Int
+
+  title       String
+  contentJson Json
+  status      ContentStatus
+
+  editedById String
+  editedBy   User @relation("PageRevisionEditor", fields: [editedById], references: [id], onDelete: Restrict)
+
+  changeSummary String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([pageId, version])
+  @@index([pageId, createdAt])
+}
+
+model Redirect {
+  id String @id @default(cuid())
+
+  fromPath String @unique
+  toPath   String
+
+  statusCode Int @default(301)
+
+  isActive Boolean @default(true)
+
+  createdById String?
+  createdBy   User? @relation("RedirectCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([toPath])
+  @@index([isActive])
+}
+
+model ContentCategory {
+  id          String @id @default(cuid())
+  name        String @unique
+  slug        String @unique
+  description String?
+
+  parentId String?
+
+  parent   ContentCategory?  @relation("ContentCategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children ContentCategory[] @relation("ContentCategoryHierarchy")
+
+  articles Article[]
+  news     News[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([slug])
+  @@index([parentId])
+}
+
+model ContentTag {
+  id          String @id @default(cuid())
+  name        String @unique
+  slug        String @unique
+  description String?
+
+  articles ArticleTag[]
+  news     NewsTag[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([slug])
 }
 
 // ─────────────────────────────────────────────
@@ -994,4 +1278,244 @@ model SpecificationOption {
 
   @@unique([definitionId, value])
   @@index([definitionId, sortOrder])
+}
+
+// ─────────────────────────────────────────────
+// ARTICLE REVISIONS
+// ─────────────────────────────────────────────
+
+model ArticleRevision {
+  id String @id @default(cuid())
+
+  articleId String
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  version Int
+
+  title   String
+  excerpt String?
+  contentJson Json
+
+  status ContentStatus
+
+  editedById String
+  editedBy   User @relation("ArticleRevisionEditor", fields: [editedById], references: [id], onDelete: Restrict)
+
+  changeSummary String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([articleId, version])
+  @@index([articleId, createdAt])
+  @@index([editedById])
+}
+
+model Article {
+  id String @id @default(cuid())
+
+  title String
+  slug  String @unique
+
+  excerpt String?
+
+  contentJson Json
+
+  status ContentStatus @default(DRAFT)
+
+  authorId String
+  author   User @relation("ArticleAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  categoryId String?
+  category   ContentCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  featuredMediaId String?
+  featuredMedia   Media? @relation("ArticleFeaturedMedia", fields: [featuredMediaId], references: [id], onDelete: SetNull)
+
+  tags     ArticleTag[]
+  products ArticleProduct[]
+
+  revisions ArticleRevision[]
+
+  seoTitle       String?
+  seoDescription String?
+  canonicalUrl   String?
+  robots         String?
+  ogTitle        String?
+  ogDescription  String?
+
+  ogImageId String?
+  ogImage   Media? @relation("ArticleOgImage", fields: [ogImageId], references: [id], onDelete: SetNull)
+
+  publishedAt DateTime?
+  scheduledAt DateTime?
+  archivedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([status, publishedAt])
+  @@index([authorId])
+  @@index([categoryId])
+  @@index([publishedAt])
+  @@index([scheduledAt])
+}
+
+model Page {
+  id String @id @default(cuid())
+
+  title String
+  slug  String @unique
+
+  contentJson Json
+
+  status ContentStatus @default(DRAFT)
+
+  authorId String
+  author   User @relation("PageAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  featuredMediaId String?
+  featuredMedia   Media? @relation("PageFeaturedMedia", fields: [featuredMediaId], references: [id], onDelete: SetNull)
+
+  revisions PageRevision[]
+
+  seoTitle       String?
+  seoDescription String?
+  canonicalUrl   String?
+  robots         String?
+  ogTitle        String?
+  ogDescription  String?
+
+  ogImageId String?
+  ogImage   Media? @relation("PageOgImage", fields: [ogImageId], references: [id], onDelete: SetNull)
+
+  publishedAt DateTime?
+  scheduledAt DateTime?
+  archivedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([publishedAt])
+  @@index([scheduledAt])
+}
+
+// ─────────────────────────────────────────────
+// NEWS REVISIONS
+// ─────────────────────────────────────────────
+
+model NewsRevision {
+  id String @id @default(cuid())
+
+  newsId String
+  news   News @relation(fields: [newsId], references: [id], onDelete: Cascade)
+
+  version Int
+
+  title   String
+  excerpt String?
+  contentJson Json
+
+  status ContentStatus
+
+  editedById String
+  editedBy   User @relation("NewsRevisionEditor", fields: [editedById], references: [id], onDelete: Restrict)
+
+  changeSummary String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([newsId, version])
+  @@index([newsId, createdAt])
+  @@index([editedById])
+}
+
+// ─────────────────────────────────────────────
+// PAGE REVISIONS
+// ─────────────────────────────────────────────
+
+model PageRevision {
+  id String @id @default(cuid())
+
+  pageId String
+  page   Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  version Int
+
+  title String
+  contentJson Json
+
+  status ContentStatus
+
+  editedById String
+  editedBy   User @relation("PageRevisionEditor", fields: [editedById], references: [id], onDelete: Restrict)
+
+  changeSummary String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([pageId, version])
+  @@index([pageId, createdAt])
+  @@index([editedById])
+}
+
+// ─────────────────────────────────────────────
+// CMS REDIRECTS
+// ─────────────────────────────────────────────
+
+model Redirect {
+  id String @id @default(cuid())
+
+  fromPath String @unique
+  toPath   String
+
+  statusCode Int @default(301)
+  isActive   Boolean @default(true)
+
+  createdById String?
+  createdBy   User? @relation("RedirectCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([toPath])
+}
+
+
+model Product {
+  id               String  @id @default(cuid())
+  name             String
+  slug             String  @unique
+  description      String?
+  shortDescription String?
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  brandId String
+  brand   Brand  @relation(fields: [brandId], references: [id])
+
+  releaseDate DateTime?
+  isActive    Boolean   @default(true)
+
+  variants       ProductVariant[]
+  images         ProductImage[]
+  specifications ProductSpecification[]
+  prices         Price[]
+  reviews        Review[]
+  favorites      Favorite[]
+  priceAlerts    PriceAlert[]
+
+  // CMS references
+  articleReferences ArticleProduct[]
+  newsReferences    NewsProduct[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([isActive])
 }
