@@ -37,7 +37,7 @@ import accountRoutes from "../modules/account/account.routes";
 import adminAuditRoutes from "./admin-audit.routes";
 import analyticsRoutes from "../services/analytics/analytics.routes";
 import priceAlertRoutes from "../modules/price-alert/price-alert.routes";
-
+import adminSpecificationSchemaRoutes from "./admin-specification-schema.routes";
 
 
 const router = Router();
@@ -173,6 +173,16 @@ router.use(
   "/admin/specifications",
   requireAuth,
   adminSpecificationRoutes,
+);
+
+// ==================================================
+// ADMIN PRODUCT SPECIFICATION SCHEMAS
+// ==================================================
+
+router.use(
+  "/admin/specification-schemas",
+  requireAuth,
+  adminSpecificationSchemaRoutes,
 );
 
 // ==================================================

@@ -395,6 +395,8 @@ model Category {
 
   products Product[]
 
+  specificationSchemas SpecificationSchema[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -561,18 +563,34 @@ model ProductSpecification {
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  specificationId String
-  specification   Specification @relation(fields: [specificationId], references: [id], onDelete: Cascade)
+  // Existing specification system
+  specificationId String?
+  specification   Specification? @relation(fields: [specificationId], references: [id], onDelete: Cascade)
 
   valueId String?
   value   SpecificationValue? @relation(fields: [valueId], references: [id])
 
   customValue String?
 
+  // New schema-driven specification system
+  definitionId String?
+  definition   SpecificationDefinition? @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+
+  valueText    String?
+  valueNumber  Decimal?  @db.Decimal(20, 6)
+  valueBoolean Boolean?
+  valueDate    DateTime?
+  valueJson    Json?
+
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([productId, specificationId])
+  @@unique([productId, definitionId])
   @@index([specificationId])
+  @@index([definitionId])
+  @@index([definitionId, valueNumber])
+  @@index([definitionId, valueBoolean])
 }
 
 // ─────────────────────────────────────────────
@@ -873,4 +891,107 @@ model AnalyticsEvent {
   @@index([sessionId, createdAt])
   @@index([entityType, entityId, createdAt])
   @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────
+// CMS SPECIFICATION ENGINE
+// ─────────────────────────────────────────────
+
+model SpecificationSchema {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique
+  description String?
+
+  version Int @default(1)
+
+  isActive Boolean @default(true)
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  groups SpecificationGroup[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([isActive])
+}
+
+model SpecificationGroup {
+  id String @id @default(cuid())
+
+  schemaId String
+  schema   SpecificationSchema @relation(fields: [schemaId], references: [id], onDelete: Cascade)
+
+  name        String
+  slug        String
+  description String?
+
+  sortOrder Int @default(0)
+
+  definitions SpecificationDefinition[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schemaId, slug])
+  @@index([schemaId, sortOrder])
+}
+
+model SpecificationDefinition {
+  id String @id @default(cuid())
+
+  groupId String
+  group   SpecificationGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  name String
+  slug String
+
+  dataType String  @default("TEXT")
+  unit     String?
+
+  isRequired   Boolean @default(false)
+  isFilterable Boolean @default(false)
+  isComparable Boolean @default(false)
+  isSearchable Boolean @default(false)
+
+  sortOrder Int @default(0)
+
+  configuration Json?
+
+  options SpecificationOption[]
+
+  productSpecifications ProductSpecification[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([groupId, slug])
+  @@index([groupId, sortOrder])
+  @@index([dataType])
+  @@index([isFilterable])
+  @@index([isComparable])
+  @@index([isSearchable])
+}
+
+model SpecificationOption {
+  id String @id @default(cuid())
+
+  definitionId String
+  definition   SpecificationDefinition? @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+
+  label String
+  value String
+
+  sortOrder Int @default(0)
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([definitionId, value])
+  @@index([definitionId, sortOrder])
 }

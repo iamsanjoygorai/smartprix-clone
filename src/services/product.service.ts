@@ -2653,33 +2653,38 @@ export const getProductBySlug = async (slug: string) => {
   // ─────────────────────────────────────────────
 
   const specifications = product.specifications
-    .map((item) => {
-      const specification = item.specification;
+  .filter(
+    (
+      item,
+    ): item is typeof item & {
+      specification: NonNullable<
+        typeof item.specification
+      >;
+    } => item.specification !== null,
+  )
+  .map((item) => {
+    const specification = item.specification;
 
-      // customValue takes priority over SpecificationValue
-      const value =
-        item.customValue?.trim() ||
-        item.value?.value?.trim() ||
-        null;
+    // customValue takes priority over SpecificationValue
+    const value =
+      item.customValue?.trim() ||
+      item.value?.value?.trim() ||
+      null;
 
-      return {
-        id: specification.id,
-        name: specification.name,
-        slug: specification.slug,
-
-        value,
-
-        unit: specification.unit,
-        dataType: specification.dataType,
-
-        group: specification.group,
-        column: specification.column,
-
-        groupOrder: specification.groupOrder,
-        sortOrder: specification.sortOrder,
-      };
-    })
-    .filter((item) => item.value !== null);
+    return {
+      id: specification.id,
+      name: specification.name,
+      slug: specification.slug,
+      value,
+      unit: specification.unit,
+      dataType: specification.dataType,
+      group: specification.group,
+      column: specification.column,
+      groupOrder: specification.groupOrder,
+      sortOrder: specification.sortOrder,
+    };
+  })
+  .filter((item) => item.value !== null);
 
   // ─────────────────────────────────────────────
   // GROUP SPECIFICATIONS
@@ -2813,31 +2818,36 @@ export const getProductSpecifications = async (
       ],
     });
 
-  return productSpecifications
-    .map((item) => {
-      const specification = item.specification;
+return productSpecifications
+  .filter(
+    (
+      item,
+    ): item is typeof item & {
+      specification: NonNullable<
+        typeof item.specification
+      >;
+    } => item.specification !== null,
+  )
+  .map((item) => {
+    const specification = item.specification;
 
-      const value =
-        item.customValue?.trim() ||
-        item.value?.value?.trim() ||
-        null;
+    const value =
+      item.customValue?.trim() ||
+      item.value?.value?.trim() ||
+      null;
 
-      return {
-        id: specification.id,
-        name: specification.name,
-        slug: specification.slug,
-
-        value,
-
-        unit: specification.unit,
-        dataType: specification.dataType,
-
-        group: specification.group,
-        column: specification.column,
-
-        groupOrder: specification.groupOrder,
-        sortOrder: specification.sortOrder,
-      };
-    })
+    return {
+      id: specification.id,
+      name: specification.name,
+      slug: specification.slug,
+      value,
+      unit: specification.unit,
+      dataType: specification.dataType,
+      group: specification.group,
+      column: specification.column,
+      groupOrder: specification.groupOrder,
+      sortOrder: specification.sortOrder,
+    };
+  })
   .filter((item) => item.value !== null);
 };

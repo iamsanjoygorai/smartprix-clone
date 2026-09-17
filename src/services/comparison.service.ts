@@ -1,6 +1,5 @@
 import prisma from "../db/prisma";
 
-
 export const getComparisonProducts = async (
   productIds: string[],
 ) => {
@@ -11,28 +10,35 @@ export const getComparisonProducts = async (
       },
       isActive: true,
     },
+
     include: {
       brand: true,
+
       category: true,
+
       images: {
         orderBy: {
           sortOrder: "asc",
         },
         take: 1,
       },
+
       specifications: {
         include: {
           specification: true,
           value: true,
         },
       },
+
       prices: {
         where: {
           inStock: true,
         },
+
         include: {
           seller: true,
         },
+
         orderBy: {
           amount: "asc",
         },
@@ -42,9 +48,16 @@ export const getComparisonProducts = async (
 
   return productIds
     .map((productId) =>
-      products.find((product) => product.id === productId),
+      products.find(
+        (product) => product.id === productId,
+      ),
     )
-    .filter((product) => product !== undefined)
+    .filter(
+      (
+        product,
+      ): product is (typeof products)[number] =>
+        product !== undefined,
+    )
     .map((product) => ({
       id: product.id,
       name: product.name,
@@ -54,12 +67,15 @@ export const getComparisonProducts = async (
       images: product.images,
       specifications: product.specifications,
       prices: product.prices,
-      lowestPrice: product.prices[0]?.amount ?? null,
+      lowestPrice:
+        product.prices[0]?.amount ?? null,
     }));
 };
 
 export const buildSpecificationComparison = (
-  products: Awaited<ReturnType<typeof getComparisonProducts>>,
+  products: Awaited<
+    ReturnType<typeof getComparisonProducts>
+  >,
 ) => {
   const specificationMap = new Map<
     string,
@@ -72,24 +88,42 @@ export const buildSpecificationComparison = (
 
   for (const product of products) {
     for (const item of product.specifications) {
-      const specificationName = item.specification.name;
-
-      if (!specificationMap.has(specificationName)) {
-        specificationMap.set(specificationName, {
-          name: specificationName,
-          unit: item.specification.unit,
-          values: {},
-        });
+      /*
+       * ProductSpecification.specification is nullable
+       * because legacy specification records may exist
+       * without a linked Specification.
+       *
+       * Ignore those records safely.
+       */
+      if (!item.specification) {
+        continue;
       }
 
-      const specification = specificationMap.get(specificationName);
+      const specificationName =
+        item.specification.name;
+
+      if (!specificationMap.has(specificationName)) {
+        specificationMap.set(
+          specificationName,
+          {
+            name: specificationName,
+            unit: item.specification.unit,
+            values: {},
+          },
+        );
+      }
+
+      const specification =
+        specificationMap.get(specificationName);
 
       if (!specification) {
         continue;
       }
 
       specification.values[product.slug] =
-        item.value?.value ?? item.customValue ?? null;
+        item.value?.value ??
+        item.customValue ??
+        null;
     }
   }
 
@@ -101,43 +135,55 @@ export const buildSpecificationComparison = (
     }
   }
 
-  return Array.from(specificationMap.values());
+  return Array.from(
+    specificationMap.values(),
+  );
 };
 
-
-export const getProductBySlug = async (slug: string) => {
+export const getProductBySlug = async (
+  slug: string,
+) => {
   return prisma.product.findUnique({
     where: {
       slug,
       isActive: true,
     },
+
     include: {
       brand: true,
+
       category: true,
+
       images: {
         orderBy: {
           sortOrder: "asc",
         },
       },
+
       variants: true,
+
       specifications: {
         include: {
           specification: true,
           value: true,
         },
       },
+
       prices: {
         where: {
           inStock: true,
         },
+
         include: {
           seller: true,
           variant: true,
         },
+
         orderBy: {
           amount: "asc",
         },
       },
+
       reviews: {
         orderBy: {
           createdAt: "desc",
